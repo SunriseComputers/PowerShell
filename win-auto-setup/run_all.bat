@@ -78,7 +78,7 @@ echo.
 set /p runBloat=Do you want to run the Bloatware App Remover? (Y/N): 
 if /I "%runBloat%"=="Y" (
     echo Running bloatware remover script...
-    powershell -ExecutionPolicy Bypass -File "%ScriptPath%\Bloatware_App_Remover.ps1"
+    powershell -ExecutionPolicy Bypass -File "%ScriptPath%\App_Remover.ps1"
 ) else (
     echo Skipping Bloatware Remover.
 )
@@ -102,3 +102,4 @@ timeout /t 3 >nul
 taskkill /f /im powershell.exe >nul 2>&1
 taskkill /f /im cmd.exe >nul 2>&1
 exit
+
