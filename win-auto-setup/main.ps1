@@ -1,9 +1,3 @@
-# ==============================================
-# Dynamic GitHub-Based Setup Script
-# ==============================================
-
-# Requires -RunAsAdministrator
-
 # Check for admin rights
 if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Host "Requesting administrative privileges..." -ForegroundColor Yellow
@@ -36,7 +30,7 @@ Write-Host "Performance Computing - Since 2001" -ForegroundColor Yellow
 Write-Host ""
 
 # GitHub Configuration - UPDATE THIS TO YOUR REPOSITORY
-$GITHUB_BASE = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/Scripts"
+$GITHUB_BASE = "https://github.com/SunriseComputers/PowerShell/tree/main/win-auto-setup/Scripts"
 
 # Script Configuration - Define your script mappings
 $script_winget = "Winget_Install.ps1"
