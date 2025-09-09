@@ -1,22 +1,17 @@
-# ==============================================
-# Dynamic GitHub-Based Setup Script
-# ==============================================
-
 #Requires -RunAsAdministrator
 
-# Check for admin rights
+# Check for admin rights and restart if needed
 if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Host "Requesting administrative privileges..." -ForegroundColor Yellow
-    Start-Process PowerShell -Verb RunAs "-File `"$PSCommandPath`""
+    Start-Process PowerShell -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
     exit
 }
 
 # Set Execution Policy
 try {
     Set-ExecutionPolicy Unrestricted -Scope LocalMachine -Force
-    Write-Host "Execution Policy set successfully." -ForegroundColor Green
 } catch {
-    Write-Host "Warning: Could not set execution policy: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "Warning: Could not set execution policy" -ForegroundColor Yellow
 }
 
 # Set console colors
@@ -24,24 +19,10 @@ try {
     $Host.UI.RawUI.BackgroundColor = "Black"
     $Host.UI.RawUI.ForegroundColor = "Green"
     Clear-Host
-} catch {
-    # Ignore color setting errors
-}
+} catch {}
 
-# ASCII Art Header
-Write-Host ""
-Write-Host "  _____                             ____                            _                " -ForegroundColor Cyan
-Write-Host " / ____|                           / ____|                          | |               " -ForegroundColor Cyan
-Write-Host "| (___  _   _ _ __ ___ _ __   _     | |     ___  _ __ ___  _ __  _   _| |_ ___ _ __ ___ " -ForegroundColor Cyan
-Write-Host " \___ \| | | | '_ ` _ \| '_ \ (_)   | |    / _ \| '_ ` _ \| '_ \| | | | __/ _ \| '__/ __|" -ForegroundColor Cyan
-Write-Host " ____) | |_| | | | | | | |_) |_    | |___| (_) | | | | | | |_) | |_| | ||  __/| |  \__ \" -ForegroundColor Cyan
-Write-Host "|_____/ \__,_|_| |_| |_| .__/(_)    \_____\___/|_| |_| |_| .__/ \__,_|\__\___||_|  |___/" -ForegroundColor Cyan
-Write-Host "                      | |                               | |                           " -ForegroundColor Cyan
-Write-Host "                      |_|                               |_|                          " -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Performance Computing" -ForegroundColor Yellow
-Write-Host "Since 2001" -ForegroundColor Yellow
-Write-Host ""
+Write-Host "Windows Auto Setup Toolkit" -ForegroundColor Green
+Write-Host "Performance Computing - Since 2001" -ForegroundColor Yellow
 
 # Configuration
 $GITHUB_BASE = "https://raw.githubusercontent.com/SunriseComputers/PowerShell/main/win-auto-setup/Scripts"
@@ -55,8 +36,11 @@ $scripts = @{
 
 # Helper function for pausing
 function Wait-ForKey {
-    Write-Host "Press any key to continue..." -ForegroundColor Yellow
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    try {
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    } catch {
+        Read-Host "Press Enter to continue" | Out-Null
+    }
 }
 
 # Function to run script from GitHub
@@ -67,11 +51,7 @@ function Invoke-GitHubScript {
         [switch]$Silent
     )
     
-    if (-not $Silent) {
-        Write-Host "`nDownloading and running $DisplayName..." -ForegroundColor Green
-    } else {
-        Write-Host "Running $DisplayName..." -ForegroundColor Green
-    }
+    if (-not $Silent) { Write-Host "`nRunning $DisplayName..." -ForegroundColor Green }
     
     try {
         $script = Invoke-RestMethod -Uri "$GITHUB_BASE/$ScriptName"
@@ -85,9 +65,7 @@ function Invoke-GitHubScript {
         Write-Host $_.Exception.Message -ForegroundColor Yellow
     }
     
-    if (-not $Silent) {
-        Wait-ForKey
-    }
+    if (-not $Silent) { Wait-ForKey }
 }
 
 # Function to display menu
@@ -111,7 +89,6 @@ function Show-Menu {
 # Function to list available scripts
 function Show-AvailableScripts {
     Write-Host "`nAvailable Scripts:" -ForegroundColor Green
-    Write-Host "==================" -ForegroundColor Green
     $scripts.Values | ForEach-Object { Write-Host "  - $_" -ForegroundColor White }
     Wait-ForKey
 }
@@ -120,21 +97,20 @@ function Show-AvailableScripts {
 function Invoke-CustomScript {
     Show-AvailableScripts
     $custom_script = Read-Host "`nEnter script filename"
-    if (-not [string]::IsNullOrWhiteSpace($custom_script)) {
+    if ($custom_script) {
         Invoke-GitHubScript -ScriptName $custom_script -DisplayName "Custom Script"
     }
 }
 
 # Function to run all scripts
 function Invoke-AllScripts {
-    Write-Host "`nWARNING: This will download and run all scripts automatically." -ForegroundColor Red
-    $confirm = Read-Host "Are you sure you want to continue? (Y/N)"
+    Write-Host "`nWARNING: This will run all scripts automatically." -ForegroundColor Red
+    $confirm = Read-Host "Continue? (Y/N)"
     
     if ($confirm -eq "Y" -or $confirm -eq "y") {
         $i = 1
-        $total = $scripts.Count
         $scripts.GetEnumerator() | ForEach-Object {
-            Write-Host "`n[$i/$total] " -NoNewline -ForegroundColor Yellow
+            Write-Host "`n[$i/$($scripts.Count)] " -NoNewline -ForegroundColor Yellow
             Invoke-GitHubScript -ScriptName $_.Value -DisplayName $_.Key -Silent
             $i++
         }
@@ -171,7 +147,7 @@ try {
         }
     } while ($true)
 } catch {
-    Write-Host "`nAn unexpected error occurred: $($_.Exception.Message)" -ForegroundColor Red
-    Wait-ForKey
+    Write-Host "`nError: $($_.Exception.Message)" -ForegroundColor Red
+    try { Wait-ForKey } catch { Read-Host "Press Enter to exit" }
     exit 1
 }
