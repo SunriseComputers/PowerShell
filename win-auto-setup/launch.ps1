@@ -56,32 +56,32 @@ $scripts = @{
 “1” = @{
 name = “Winget_Install.ps1”
 description = “Install WinGet Package Manager”
-oneliner = “irm "$GITHUB_BASE/Winget_Install.ps1” | iex”
+oneliner = “irm "https://github.com/SunriseComputers/PowerShell/tree/main/win-auto-setup/Scripts/Winget_Install.ps1” | iex”
 }
 “2” = @{
 name = “Online-app-Install.ps1”
 description = “Install Apps (Online Method)”
-oneliner = “irm "$GITHUB_BASE/Online-app-Install.ps1” | iex”
+oneliner = “irm "https://github.com/SunriseComputers/PowerShell/tree/main/win-auto-setup/Scripts/Online-app-Install.ps1” | iex”
 }
 “3” = @{
 name = “Offline-app_Install.ps1”
 description = “Install Apps (Offline Method)”
-oneliner = “irm "$GITHUB_BASE/Offline-app_Install.ps1” | iex”
+oneliner = “irm "https://github.com/SunriseComputers/PowerShell/tree/main/win-auto-setup/Scripts/Offline-app_Install.ps1” | iex”
 }
 “4” = @{
 name = “Performance_Tweaks.ps1”
 description = “Apply Windows Performance Tweaks”
-oneliner = “irm "$GITHUB_BASE/Performance_Tweaks.ps1” | iex”
+oneliner = “irm "https://github.com/SunriseComputers/PowerShell/tree/main/win-auto-setup/Scripts/Performance_Tweaks.ps1” | iex”
 }
 “5” = @{
 name = “App_Remover.ps1”
 description = “Remove Windows Bloatware”
-oneliner = “irm "$GITHUB_BASE/App_Remover.ps1” | iex”
+oneliner = “irm "https://github.com/SunriseComputers/PowerShell/tree/main/win-auto-setup/Scripts/App_Remover.ps1” | iex”
 }
 “6” = @{
 name = “System_Cleanup.ps1”
 description = “System Cleanup & Optimization”
-oneliner = “irm "$GITHUB_BASE/System_Cleanup.ps1” | iex”
+oneliner = “irm "https://github.com/SunriseComputers/PowerShell/tree/main/win-auto-setup/Scripts/System_Cleanup.ps1” | iex”
 }
 }
 
