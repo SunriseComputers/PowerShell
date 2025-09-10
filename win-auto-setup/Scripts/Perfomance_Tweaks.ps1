@@ -227,23 +227,6 @@ $tweaksConfig = @'
       }
     ]
   },
-  "ChangeTerminalDefault": {
-    "Content": "Install PowerShell 7 and set as Windows Terminal default",
-    "Description": "Installs PowerShell 7 if missing, then sets it as the default profile in Windows Terminal.",
-    "category": "Enhancement",
-    "InvokeScript": [
-      "if (-not (Get-Command 'pwsh' -ErrorAction SilentlyContinue)) { Write-Host 'Installing PowerShell 7...' -ForegroundColor Yellow; try { if (Get-Command 'winget' -ErrorAction SilentlyContinue) { winget install Microsoft.PowerShell --silent --accept-package-agreements --accept-source-agreements | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'WinGet failed' } } else { $arch = if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' }; $url = \"https://github.com/PowerShell/PowerShell/releases/latest/download/PowerShell-7.4.6-win-$arch.msi\"; $installer = \"$env:TEMP\\PowerShell7.msi\"; Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing; Start-Process msiexec.exe -ArgumentList '/i', $installer, '/quiet', '/norestart' -Wait; Remove-Item $installer -Force -ErrorAction SilentlyContinue }; $env:PATH = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User'); Start-Sleep -Seconds 3; Write-Host 'PowerShell 7 installed successfully' -ForegroundColor Green } catch { Write-Host 'PowerShell 7 installation failed' -ForegroundColor Red; return } } else { Write-Host 'PowerShell 7 already installed' -ForegroundColor Green }; if (Get-Command 'pwsh' -ErrorAction SilentlyContinue) { $settingsPath = \"$env:LOCALAPPDATA\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json\"; if (Test-Path $settingsPath) { try { $settings = Get-Content $settingsPath | ConvertFrom-Json; $pwshProfile = $settings.profiles.list | Where-Object { $_.commandline -like '*pwsh*' -or $_.name -like '*PowerShell 7*' } | Select-Object -First 1; if ($pwshProfile) { $settings.defaultProfile = $pwshProfile.guid; $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath; Write-Host 'Windows Terminal default set to PowerShell 7' -ForegroundColor Green } else { Write-Host 'PowerShell 7 profile not found in Terminal' -ForegroundColor Yellow } } catch { Write-Host 'Could not update Terminal settings' -ForegroundColor Yellow } } else { Write-Host 'Windows Terminal not installed' -ForegroundColor Yellow } } else { Write-Host 'PowerShell 7 not available after installation' -ForegroundColor Red }"
-    ]
-  },
-  "DisablePowerShell7Telemetry": {
-    "Content": "Disable Powershell 7 Telemetry",
-    "Description": "Disables telemetry for PowerShell 7.",
-    "category": "Privacy",
-    "InvokeScript": [
-      "[Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT', '1', 'Machine')",
-      "Write-Host 'PowerShell 7 telemetry disabled'"
-    ]
-  },
   "SetServicesManual": {
     "Content": "Set Services to Manual",
     "Description": "Sets various Windows services to manual startup to improve boot time.",
