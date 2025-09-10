@@ -1,20 +1,3 @@
-
-
-# WinGet Version Checker and Updater
-
-Write-Host "   _____                  _             _____                            _                
-  / ____|                (_)           / ____|                          | |               
- | (___  _   _ _ __  _ __ _ ___  ___  | |     ___  _ __ ___  _ __  _   _| |_ ___ _ __ ___ 
-  \___ \| | | | '_ \| '__| / __|/ _ \ | |    / _ \| '_ ` _ \| '_ \| | | | __/ _ \ '__/ __|
-  ____) | |_| | | | | |  | \__ \  __/ | |___| (_) | | | | | | |_) | |_| | ||  __/ |  \__ \
- |_____/ \__,_|_| |_|_|  |_|___/\___|  \_____\___/|_| |_| |_| .__/ \__,_|\__\___|_|  |___/
-                                                            | |                           
-                                                            |_|                           "-ForegroundColor Red
-Write-Host "Performance Computing" -ForegroundColor Cyan
-Write-Host "Since 2001 `n"
-
-Winget Upgrade Winget --accept-source-agreements --accept-package-agreements
-
 Write-Host "Winget Update Process Completed" -ForegroundColor Magenta
 
 Write-Host "Now, Installing Your Selected Apps" -ForegroundColor Cyan
