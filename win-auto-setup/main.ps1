@@ -5,8 +5,8 @@ $GITHUB_BASE = "https://raw.githubusercontent.com/SunriseComputers/PowerShell/ma
 $scripts = @{
     "1" = @{ Name = "Install WinGet"; File = "Winget_Install.ps1" }
     "2" = @{ Name = "Install Apps (Online)"; File = "Online-app-Install.ps1" }
-    "3" = @{ Name = "Install Apps (Offline)"; File = "Offline_app-Install.ps1" }
-    "4" = @{ Name = "Apply Performance Tweaks"; File = "Perfomance_Tweaks.ps1" }
+    "3" = @{ Name = "Apply Performance Tweaks"; File = "Perfomance_Tweaks.ps1" }
+    "4" = @{ Name = "Stop Automatic Windows Updates"; File = "Delay-WindowsUpdates.ps1" }
     "5" = @{ Name = "Remove Bloatware"; File = "App_Remover.ps1" }
     "6" = @{ Name = "Run All Scripts"; File = "" }
 }
@@ -60,7 +60,7 @@ function Invoke-AllScripts {
     $confirm = Read-Host "Continue? (Y/N)"
     
     if ($confirm -eq "Y" -or $confirm -eq "y") {
-        $scriptOrder = @("1", "2", "3", "4", "5")
+        $scriptOrder = @("1", "2", "3", "4","5")
         
         foreach ($key in $scriptOrder) {
             $scriptFile = $scripts[$key].File
