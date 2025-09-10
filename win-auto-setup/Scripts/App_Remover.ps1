@@ -1,81 +1,107 @@
-# Interactive App Removal Tool - Registry Based
-# Modern version using Windows Registry for app discovery
+# Interactive App Removal Tool
 
-# Ensure we're running as admin
 If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]'Administrator')) {
-    Write-Host "This script needs to be run as Administrator. Attempting to relaunch..."
-    Start-Process PowerShell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-    Exit
+    Start-Process PowerShell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; Exit
 }
 
-# Load Windows Forms assemblies
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+$script:SelectedApps = @(); $script:AppRegistry = @{}; $script:selectionBoxIndex = -1
 
-# Global variables
-$script:SelectedApps = @()
-$script:AppRegistry = @{}
-$script:selectionBoxIndex = -1
-
-# Get installed apps from registry
 function Get-InstalledApps {
-    $registryPaths = @(
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    )
-    
     $apps = @{}
-    foreach ($path in $registryPaths) {
-        try {
-            Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object {
-                $_.DisplayName -and 
-                $_.DisplayName -notmatch '^(Microsoft Visual C\+\+|Microsoft \.NET|Update for|Security Update|Hotfix|KB\d+)' -and
-                $_.UninstallString -and
-                $_.SystemComponent -ne 1 -and
-                $_.ReleaseType -ne "Security Update" -and
-                $_.ParentKeyName -eq $null
-            } | ForEach-Object {
-                $displayText = if ($_.Publisher) { "$($_.DisplayName) ($($_.Publisher))" } else { $_.DisplayName }
-                $apps[$displayText] = @{
-                    UninstallString = $_.UninstallString
-                    QuietUninstallString = $_.QuietUninstallString
-                    DisplayName = $_.DisplayName
-                    Publisher = $_.Publisher
-                }
-            }
-        } catch { }
+    @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+      "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+      "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*") | ForEach-Object {
+        Get-ItemProperty $_ -ErrorAction SilentlyContinue | Where-Object {
+            $_.DisplayName -and $_.UninstallString -and $_.SystemComponent -ne 1 -and
+            $_.DisplayName -notmatch '^(Microsoft Visual C\+\+|Microsoft \.NET|Update for|Security Update|Hotfix|KB\d+)' -and
+            $_.ReleaseType -ne "Security Update" -and $_.ParentKeyName -eq $null
+        } | ForEach-Object {
+            $cleanName = $_.DisplayName -replace '\s+\([^)]*\)$', ''
+            $apps[$cleanName] = @{ UninstallString = $_.UninstallString; QuietUninstallString = $_.QuietUninstallString; DisplayName = $_.DisplayName; Type = "Registry" }
+        }
     }
     return $apps
 }
 
-# Shows application selection form
+function Get-UWPApps {
+    $apps = @{}
+    try {
+        $packages = Get-AppxPackage -ErrorAction SilentlyContinue; $packages += Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue
+        $packages | Where-Object {
+            $_.Name -notmatch '^(Microsoft\.Windows\.|Microsoft\.NET\.|Microsoft\.VCLibs|Microsoft\.UI\.Xaml|windows\.immersivecontrolpanel|Microsoft\.AAD\.BrokerPlugin|Microsoft\.AccountsControl)' -and
+            $_.SignatureKind -ne "System" -and $_.IsFramework -eq $false
+        } | Sort-Object Name -Unique | ForEach-Object {
+            $simpleName = if ($_.DisplayName) { $_.DisplayName } else { $_.Name -replace '^Microsoft\.', '' -replace '\.', ' ' -replace 'App$', '' }
+            if (-not $apps.ContainsKey($simpleName)) {
+                $apps[$simpleName] = @{ PackageName = $_.Name; PackageFullName = $_.PackageFullName; DisplayName = $simpleName; Publisher = $_.Publisher; Type = "UWP" }
+            }
+        }
+    } catch { }
+    return $apps
+}
+
+function Get-BloatwareApps {
+    $bloatwareNames = @('Clipchamp', 'Maps', 'Xbox', 'Xbox Game Bar', 'Xbox Identity Provider', 'Xbox Speech To Text Overlay',
+        'Microsoft Teams', 'Teams', 'OneDrive', 'Microsoft To Do', 'Microsoft Sticky Notes', 'Alarms & Clock', 'Calculator',
+        'Calendar', 'Camera', 'Get Help', 'Groove Music', 'Mail and Calendar', 'Movies & TV', 'News', 'OneNote', 'Paint 3D',
+        'Photos', 'Skype', 'Solitaire', 'Sports', 'Voice Recorder', 'Weather', 'Microsoft Store', 'Microsoft Edge', 'Cortana',
+        'Mixed Reality Portal', 'Phone Link', 'Quick Assist', 'Snipping Tool', 'Tips', 'Whiteboard', 'Microsoft Advertising SDK', 'Microsoft Pay')
+    
+    $allApps = Get-AllInstalledApps; $bloatware = @{}; $regular = @{}
+    
+    foreach ($appName in $allApps.Keys) {
+        $isBloatware = $false
+        foreach ($bloatName in $bloatwareNames) {
+            if ($appName -like "*$bloatName*" -or $appName -eq $bloatName) { $isBloatware = $true; break }
+        }
+        if ($isBloatware -or $allApps[$appName].Type -eq "UWP") { $bloatware[$appName] = $allApps[$appName] } else { $regular[$appName] = $allApps[$appName] }
+    }
+    return @{ Bloatware = $bloatware; Regular = $regular }
+}
+
+function Get-AllInstalledApps {
+    $allApps = Get-InstalledApps; $uwpApps = Get-UWPApps
+    foreach ($key in $uwpApps.Keys) { $allApps[$key] = $uwpApps[$key] }
+    return $allApps
+}
+
 function Show-AppSelectionForm {
-    # Initialize form and controls
     $form = New-Object System.Windows.Forms.Form
     $selectionBox = New-Object System.Windows.Forms.CheckedListBox 
     $loadingLabel = New-Object System.Windows.Forms.Label
     $checkUncheckCheckBox = New-Object System.Windows.Forms.CheckBox
-    
     $script:selectionBoxIndex = -1
 
     # Event handlers
-    $handler_saveButton_Click = {
-        $script:SelectedApps = $selectionBox.CheckedItems
+    $saveButton_Click = {
+        $script:SelectedApps = @()
+        foreach ($item in $selectionBox.CheckedItems) {
+            # Skip header lines (section dividers)
+            $itemText = $item.ToString()
+            if (-not ($itemText.StartsWith("═══") -or $itemText.Contains("BLOATWARE APP LIST") -or $itemText.Contains("OTHER INSTALLED APPS"))) {
+                $script:SelectedApps += $item
+            }
+        }
         $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
         $form.Close()
     }
 
-    $handler_cancelButton_Click = { $form.Close() }
     $selectionBox_SelectedIndexChanged = { $script:selectionBoxIndex = $selectionBox.SelectedIndex }
 
     $selectionBox_MouseDown = {
+        if ($selectionBox.SelectedIndex -ge 0) {
+            $selectedText = $selectionBox.Items[$selectionBox.SelectedIndex].ToString()
+            if ($selectedText.StartsWith("═══") -or $selectedText.Contains("BLOATWARE APP LIST") -or $selectedText.Contains("OTHER INSTALLED APPS")) { return }
+        }
+        
         if ($_.Button -eq [System.Windows.Forms.MouseButtons]::Left -and [System.Windows.Forms.Control]::ModifierKeys -eq [System.Windows.Forms.Keys]::Shift -and $script:selectionBoxIndex -ne -1) {
-            $topIndex = $script:selectionBoxIndex
-            $start = [math]::Min($topIndex, $selectionBox.SelectedIndex)
-            $end = [math]::Max($topIndex, $selectionBox.SelectedIndex)
+            $topIndex = $script:selectionBoxIndex; $start = [math]::Min($topIndex, $selectionBox.SelectedIndex); $end = [math]::Max($topIndex, $selectionBox.SelectedIndex)
             for ($i = $start; $i -le $end; $i++) {
-                $selectionBox.SetItemChecked($i, $selectionBox.GetItemChecked($topIndex))
+                $itemText = $selectionBox.Items[$i].ToString()
+                if (-not ($itemText.StartsWith("═══") -or $itemText.Contains("BLOATWARE APP LIST") -or $itemText.Contains("OTHER INSTALLED APPS"))) {
+                    $selectionBox.SetItemChecked($i, $selectionBox.GetItemChecked($topIndex))
+                }
             }
         } elseif ($script:selectionBoxIndex -ne $selectionBox.SelectedIndex) {
             $selectionBox.SetItemChecked($selectionBox.SelectedIndex, -not $selectionBox.GetItemChecked($selectionBox.SelectedIndex))
@@ -84,136 +110,113 @@ function Show-AppSelectionForm {
 
     $check_All = {
         for ($i = 0; $i -lt $selectionBox.Items.Count; $i++) {
-            $selectionBox.SetItemChecked($i, $checkUncheckCheckBox.Checked)
+            $itemText = $selectionBox.Items[$i].ToString()
+            if (-not ($itemText.StartsWith("═══") -or $itemText.Contains("BLOATWARE APP LIST") -or $itemText.Contains("OTHER INSTALLED APPS"))) {
+                $selectionBox.SetItemChecked($i, $checkUncheckCheckBox.Checked)
+            }
         }
     }
 
-    # Load apps into the selection box
     $load_Apps = {
-        $form.WindowState = $form.WindowState
-        $script:selectionBoxIndex = -1
-        $checkUncheckCheckBox.Checked = $False
-        $loadingLabel.Visible = $true
-        $form.Refresh()
-        $selectionBox.Items.Clear()
-
-        # Get apps from registry
-        $script:AppRegistry = Get-InstalledApps
+        $script:selectionBoxIndex = -1; $checkUncheckCheckBox.Checked = $false; $loadingLabel.Visible = $true; $form.Refresh(); $selectionBox.Items.Clear()
+        $categorizedApps = Get-BloatwareApps; $script:AppRegistry = @{}
         
-        # Add apps to selection box (sorted)
-        $script:AppRegistry.Keys | Sort-Object | ForEach-Object {
-            $selectionBox.Items.Add($_, $false) | Out-Null
+        if ($categorizedApps.Bloatware.Count -gt 0) {
+            $selectionBox.Items.Add("═══════════════════════════════════════", $false) | Out-Null
+            $selectionBox.Items.Add("         1. BLOATWARE APP LIST", $false) | Out-Null
+            $selectionBox.Items.Add("═══════════════════════════════════════", $false) | Out-Null
+            $categorizedApps.Bloatware.Keys | Sort-Object | ForEach-Object { 
+                $selectionBox.Items.Add($_, $false) | Out-Null; $script:AppRegistry[$_] = $categorizedApps.Bloatware[$_]
+            }
         }
         
-        $loadingLabel.Visible = $False
+        if ($categorizedApps.Regular.Count -gt 0) {
+            $selectionBox.Items.Add("═══════════════════════════════════════", $false) | Out-Null
+            $selectionBox.Items.Add("      2. OTHER INSTALLED APPS", $false) | Out-Null
+            $selectionBox.Items.Add("═══════════════════════════════════════", $false) | Out-Null
+            $categorizedApps.Regular.Keys | Sort-Object | ForEach-Object { 
+                $selectionBox.Items.Add($_, $false) | Out-Null; $script:AppRegistry[$_] = $categorizedApps.Regular[$_]
+            }
+        }
+        $loadingLabel.Visible = $false
     }
 
-    # Configure form and controls
-    $form.Text = "Interactive App Removal Tool"
-    $form.ClientSize = New-Object System.Drawing.Size(500,502)
-    $form.FormBorderStyle = 'FixedDialog'
-    $form.MaximizeBox = $False
-    $form.StartPosition = 'CenterScreen'
+    $form.Text = "Interactive App Removal Tool"; $form.ClientSize = New-Object System.Drawing.Size(500,502)
+    $form.FormBorderStyle = 'FixedDialog'; $form.MaximizeBox = $false; $form.StartPosition = 'CenterScreen'
 
-    # Create buttons and labels
-    $saveButton = New-Object System.Windows.Forms.Button
-    $saveButton.Text = "Remove Selected Apps"
-    $saveButton.Location = New-Object System.Drawing.Point(27,472)
-    $saveButton.Size = New-Object System.Drawing.Size(140,23)
-    $saveButton.add_Click($handler_saveButton_Click)
+    $saveButton = New-Object System.Windows.Forms.Button; $saveButton.Text = "Remove Selected Apps"
+    $saveButton.Location = New-Object System.Drawing.Point(27,472); $saveButton.Size = New-Object System.Drawing.Size(140,23)
+    $saveButton.add_Click($saveButton_Click)
 
-    $cancelButton = New-Object System.Windows.Forms.Button
-    $cancelButton.Text = "Cancel"
-    $cancelButton.Location = New-Object System.Drawing.Point(180,472)
-    $cancelButton.Size = New-Object System.Drawing.Size(75,23)
-    $cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-    $cancelButton.add_Click($handler_cancelButton_Click)
+    $cancelButton = New-Object System.Windows.Forms.Button; $cancelButton.Text = "Cancel"
+    $cancelButton.Location = New-Object System.Drawing.Point(180,472); $cancelButton.Size = New-Object System.Drawing.Size(75,23)
+    $cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel; $cancelButton.add_Click({ $form.Close() })
 
-    $instructionLabel = New-Object System.Windows.Forms.Label
-    $instructionLabel.Text = "Select apps to remove. Apps are loaded from Windows Registry."
-    $instructionLabel.Location = New-Object System.Drawing.Point(13,5)
-    $instructionLabel.Size = New-Object System.Drawing.Size(480,14)
+    $instructionLabel = New-Object System.Windows.Forms.Label; $instructionLabel.Text = "Select apps to remove. Registry and UWP/Store apps included."
+    $instructionLabel.Location = New-Object System.Drawing.Point(13,5); $instructionLabel.Size = New-Object System.Drawing.Size(480,14)
 
-    $loadingLabel.Location = New-Object System.Drawing.Point(16,46)
-    $loadingLabel.Size = New-Object System.Drawing.Size(400,418)
-    $loadingLabel.Text = 'Loading installed apps from registry...'
-    $loadingLabel.BackColor = "White"
-    $loadingLabel.Visible = $false
+    $loadingLabel.Location = New-Object System.Drawing.Point(16,46); $loadingLabel.Size = New-Object System.Drawing.Size(400,418)
+    $loadingLabel.Text = 'Loading apps...'; $loadingLabel.BackColor = "White"; $loadingLabel.Visible = $false
 
-    $checkUncheckCheckBox.Location = New-Object System.Drawing.Point(16,22)
-    $checkUncheckCheckBox.Size = New-Object System.Drawing.Size(150,20)
-    $checkUncheckCheckBox.Text = 'Check/Uncheck all'
-    $checkUncheckCheckBox.add_CheckedChanged($check_All)
+    $checkUncheckCheckBox.Location = New-Object System.Drawing.Point(16,22); $checkUncheckCheckBox.Size = New-Object System.Drawing.Size(150,20)
+    $checkUncheckCheckBox.Text = 'Check/Uncheck all'; $checkUncheckCheckBox.add_CheckedChanged($check_All)
 
-    $selectionBox.Location = New-Object System.Drawing.Point(13,43)
-    $selectionBox.Size = New-Object System.Drawing.Size(474,424)
-    $selectionBox.add_SelectedIndexChanged($selectionBox_SelectedIndexChanged)
-    $selectionBox.add_Click($selectionBox_MouseDown)
+    $selectionBox.Location = New-Object System.Drawing.Point(13,43); $selectionBox.Size = New-Object System.Drawing.Size(474,424)
+    $selectionBox.add_SelectedIndexChanged($selectionBox_SelectedIndexChanged); $selectionBox.add_Click($selectionBox_MouseDown)
 
     $form.Controls.AddRange(@($saveButton, $cancelButton, $instructionLabel, $loadingLabel, $checkUncheckCheckBox, $selectionBox))
-    $form.add_Load($load_Apps)
-    $form.Add_Shown({$form.Activate(); $selectionBox.Focus()})
-
+    $form.add_Load($load_Apps); $form.Add_Shown({$form.Activate(); $selectionBox.Focus()})
     return $form.ShowDialog()
 }
 
-# Function to remove selected apps
 function Remove-SelectedApps {
     param ([array]$AppsList)
-
-    $removed = 0
-    $failed = 0
-    $currentApp = 0
+    $removed = $failed = $currentApp = 0
     $totalApps = $AppsList.Count
 
-    Write-Host "`nStarting app removal process..." -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host "`nStarting app removal..." -ForegroundColor Cyan
 
     foreach ($app in $AppsList) { 
         $currentApp++
         $appInfo = $script:AppRegistry[$app]
-        
         Write-Host "`rProcessing ($currentApp/$totalApps): $($appInfo.DisplayName)                    " -NoNewline -ForegroundColor Cyan
         
         $appRemoved = $false
-
         try {
-            # Try quiet uninstall first, then regular uninstall
-            $uninstallCmd = if ($appInfo.QuietUninstallString) { $appInfo.QuietUninstallString } else { $appInfo.UninstallString }
-            
-            # Handle different uninstaller types
-            if ($uninstallCmd -match 'msiexec.*(/I|/X)\s*(\{[^}]+\})') {
-                # MSI package - use msiexec with silent flags
-                $productCode = $matches[2]
-                $process = Start-Process "msiexec.exe" -ArgumentList "/X$productCode /quiet /norestart" -Wait -PassThru -WindowStyle Hidden
-                $appRemoved = ($process.ExitCode -eq 0 -or $process.ExitCode -eq 1605) # 1605 = product not found (already removed)
-            }
-            elseif ($uninstallCmd -match '^"?([^"]+\.exe)"?\s*(.*)') {
-                # Regular executable
-                $exePath = $matches[1]
-                $args = $matches[2]
-                
-                # Add common silent flags if not present
-                if ($args -notmatch '(/S|/silent|/quiet|--silent)') {
-                    $args += " /S"
+            if ($appInfo.Type -eq "UWP") {
+                try {
+                    Remove-AppxPackage -Package $appInfo.PackageFullName -ErrorAction Stop
+                    $appRemoved = $true
+                } catch {
+                    try {
+                        Remove-AppxPackage -Package $appInfo.PackageFullName -AllUsers -ErrorAction Stop
+                        $appRemoved = $true
+                    } catch {
+                        Get-AppxPackage -Name $appInfo.PackageName | Remove-AppxPackage -ErrorAction SilentlyContinue
+                        Get-AppxPackage -Name $appInfo.PackageName -AllUsers | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
+                        $appRemoved = $true
+                    }
                 }
+            } else {
+                $uninstallCmd = if ($appInfo.QuietUninstallString) { $appInfo.QuietUninstallString } else { $appInfo.UninstallString }
                 
-                if (Test-Path $exePath) {
-                    $process = Start-Process $exePath -ArgumentList $args -Wait -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-                    $appRemoved = ($process.ExitCode -eq 0)
+                if ($uninstallCmd -match 'msiexec.*(/I|/X)\s*(\{[^}]+\})') {
+                    $productCode = $matches[2]; $process = Start-Process "msiexec.exe" -ArgumentList "/X$productCode /quiet /norestart" -Wait -PassThru -WindowStyle Hidden
+                    $appRemoved = ($process.ExitCode -eq 0 -or $process.ExitCode -eq 1605)
+                } elseif ($uninstallCmd -match '^"?([^"]+\.exe)"?\s*(.*)') {
+                    $exePath = $matches[1]; $args = $matches[2]
+                    if ($args -notmatch '(/S|/silent|/quiet|--silent)') { $args += " /S" }
+                    if (Test-Path $exePath) {
+                        $process = Start-Process $exePath -ArgumentList $args -Wait -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+                        $appRemoved = ($process.ExitCode -eq 0)
+                    }
                 }
             }
-
             if ($appRemoved) { $removed++ } else { $failed++ }
-        } 
-        catch { 
-            $failed++ 
-        }
+        } catch { $failed++ }
     }
 
-    # Clear progress and show summary
-    Write-Host "`r                                                                                " -NoNewline
-    Write-Host "`r" -NoNewline
+    Write-Host "`r                                                                                "
     Write-Host "`n--- App Removal Summary ---" -ForegroundColor Cyan
     Write-Host "Successfully removed: $removed" -ForegroundColor Green
     Write-Host "Failed or skipped: $failed" -ForegroundColor $(if($failed -eq 0){"Green"}else{"Yellow"})
@@ -221,40 +224,28 @@ function Remove-SelectedApps {
     
     if ($removed -gt 0) {
         Write-Host "`nApp removal completed!" -ForegroundColor Green
-        Write-Host "Note: Some changes may require a system restart to take effect." -ForegroundColor Yellow
+        Write-Host "Note: Some changes may require a restart." -ForegroundColor Yellow
     }
-    if ($failed -gt 0) {
-        Write-Host "`nSome apps may have required user interaction or custom uninstall procedures." -ForegroundColor Yellow
-    }
+    if ($failed -gt 0) { Write-Host "`nSome apps may have required user interaction." -ForegroundColor Yellow }
 }
 
 # Main execution
 Clear-Host
-Write-Host "Interactive App Removal Tool - Registry Based" -ForegroundColor Cyan
-Write-Host "=============================================" -ForegroundColor Cyan
-Write-Host "`nOpening interactive app selection window..." -ForegroundColor Green
+Write-Host "Interactive App Removal Tool" -ForegroundColor Cyan
+Write-Host "===========================" -ForegroundColor Cyan
 
-# Show the interactive form
 $result = Show-AppSelectionForm
 
 if ($result -eq [System.Windows.Forms.DialogResult]::OK -and $script:SelectedApps.Count -gt 0) {
     Write-Host "`nApps selected for removal:" -ForegroundColor Cyan
-    foreach ($app in $script:SelectedApps) {
-        Write-Host "  - $($script:AppRegistry[$app].DisplayName)" -ForegroundColor White
-    }
+    foreach ($app in $script:SelectedApps) { Write-Host "  - $($script:AppRegistry[$app].DisplayName)" -ForegroundColor White }
     
-    $confirm = Read-Host "`nDo you want to proceed with removing these $($script:SelectedApps.Count) apps? (Y/N)"
-    
-    if ($confirm -match '^[Yy]') {
-        Remove-SelectedApps -AppsList $script:SelectedApps
-    } else {
-        Write-Host "App removal cancelled by user." -ForegroundColor Yellow
-    }
+    $confirm = Read-Host "`nRemove these $($script:SelectedApps.Count) apps? (Y/N)"
+    if ($confirm -match '^[Yy]') { Remove-SelectedApps -AppsList $script:SelectedApps } else { Write-Host "Cancelled." -ForegroundColor Yellow }
 } elseif ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-    Write-Host "`nNo apps were selected for removal." -ForegroundColor Yellow
+    Write-Host "`nNo apps selected." -ForegroundColor Yellow
 } else {
-    Write-Host "`nApp selection cancelled by user." -ForegroundColor Yellow
+    Write-Host "`nCancelled." -ForegroundColor Yellow
 }
 
-Write-Host "`nPress Enter to exit..."
-Read-Host
+Read-Host "`nPress Enter to exit"
