@@ -8,7 +8,8 @@ $scripts = @{
     "3" = @{ Name = "Apply Performance Tweaks"; File = "Perfomance_Tweaks.ps1" }
     "4" = @{ Name = "Stop Automatic Windows Updates"; File = "Delay-WindowsUpdates.ps1" }
     "5" = @{ Name = "Remove Bloatware"; File = "App_Remover.ps1" }
-    "6" = @{ Name = "Run All Scripts"; File = "" }
+    "6" = @{ Name = "Lanman Network Tweaks"; File = "Lanman_Network.ps1" }
+    "7" = @{ Name = "Run All Scripts"; File = "" }
 }
 
 # Function to run script (local first, then GitHub fallback)
@@ -56,18 +57,18 @@ function Invoke-Script {
 # Function to run all scripts (local first, then GitHub fallback)
 function Invoke-AllScripts {
     Write-Host "`nRunning all scripts in sequence..." -ForegroundColor Cyan
-    Write-Host "WARNING: This will run all 5 scripts automatically." -ForegroundColor Red
+    Write-Host "WARNING: This will run all 6 scripts automatically." -ForegroundColor Red
     $confirm = Read-Host "Continue? (Y/N)"
     
     if ($confirm -eq "Y" -or $confirm -eq "y") {
-        $scriptOrder = @("1", "2", "3", "4","5")
+        $scriptOrder = @("1", "2", "3", "4","5", "6")
         
         foreach ($key in $scriptOrder) {
             $scriptFile = $scripts[$key].File
             $scriptName = $scripts[$key].Name
             $localPath = ".\$scriptFile"
             
-            Write-Host "`n[$key/5] Running: $scriptName..." -ForegroundColor Yellow
+            Write-Host "`n[$key/6] Running: $scriptName..." -ForegroundColor Yellow
             
             # Try local first
             if (Test-Path $localPath) {
@@ -136,9 +137,9 @@ Write-Host "Since 2001 `n"
 do {
     $choice = Show-Menu
     
-    if ($choice -eq "6") {
+    if ($choice -eq "7") {
         Invoke-AllScripts
-    } elseif ($scripts.ContainsKey($choice) -and $choice -ne "6") {
+    } elseif ($scripts.ContainsKey($choice) -and $choice -ne "7") {
         Invoke-Script -ScriptFile $scripts[$choice].File -ScriptName $scripts[$choice].Name
     } elseif ($choice -eq "0") {
         Write-Host "`nExiting..." -ForegroundColor Yellow
