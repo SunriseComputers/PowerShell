@@ -9,7 +9,8 @@ $scripts = @{
     "4" = @{ Name = "Stop Automatic Windows Updates"; File = "Delay-WindowsUpdates.ps1" }
     "5" = @{ Name = "Remove Bloatware"; File = "App_Remover.ps1" }
     "6" = @{ Name = "Lanman Network Tweaks"; File = "Lanman_Network.ps1" }
-    "7" = @{ Name = "Run All Scripts"; File = "" }
+    "7" = @{ Name = "Reset SMB Connection"; File = "SMB-Connection-Reset.ps1" }
+    "8" = @{ Name = "Run All Scripts"; File = "" }
 }
 
 # Function to run script (local first, then GitHub fallback)
@@ -61,7 +62,7 @@ function Invoke-AllScripts {
     $confirm = Read-Host "Continue? (Y/N)"
     
     if ($confirm -eq "Y" -or $confirm -eq "y") {
-        $scriptOrder = @("1", "2", "3", "4","5", "6")
+        $scriptOrder = @("1", "2", "3", "4","5", "6", "7")
         
         foreach ($key in $scriptOrder) {
             $scriptFile = $scripts[$key].File
@@ -137,9 +138,9 @@ Write-Host "Since 2001 `n"
 do {
     $choice = Show-Menu
     
-    if ($choice -eq "7") {
+    if ($choice -eq "8") {
         Invoke-AllScripts
-    } elseif ($scripts.ContainsKey($choice) -and $choice -ne "7") {
+    } elseif ($scripts.ContainsKey($choice) -and $choice -ne "8") {
         Invoke-Script -ScriptFile $scripts[$choice].File -ScriptName $scripts[$choice].Name
     } elseif ($choice -eq "0") {
         Write-Host "`nExiting..." -ForegroundColor Yellow
