@@ -554,3 +554,4 @@ if ($failedTweaks.Count -gt 0) {
 
 Write-Host "`nWindows optimization completed!" -ForegroundColor Green
 Write-Host "Restart recommended for all changes to take effect." -ForegroundColor Yellow
+
