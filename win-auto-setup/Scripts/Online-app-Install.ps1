@@ -2,10 +2,11 @@ Write-Host "Winget Update Process Completed" -ForegroundColor Magenta
 
 Write-Host "Now, Installing Your Selected Apps" -ForegroundColor Cyan
 $apps = @(
-    "Google.Chrome",
+    "Mozilla.Firefox",
     "SumatraPDF.SumatraPDF",
     "7zip.7zip",
-    "VideoLAN.VLC"
+    "VideoLAN.VLC",
+    "DucFabulous.UltraViewer"
     )
 # -----------------------------------------------------
 
@@ -23,7 +24,6 @@ foreach ($app in $apps) {
     # Install the package
     Write-Host "Installing $app ..." -ForegroundColor Yellow
     winget install --id $app `
-                   --exact `
                    --silent `
                    --accept-source-agreements `
                    --accept-package-agreements
@@ -34,8 +34,3 @@ foreach ($app in $apps) {
     }
 }
 
-Write-Host "Thank You For Using Our Services" -ForegroundColor Magenta
-Write-Host "Sunrise Computers" -ForegroundColor Magenta
-
-Write-Host
-Read-Host "Press Enter to exit"
