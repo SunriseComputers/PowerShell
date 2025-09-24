@@ -153,10 +153,10 @@ do {
         Write-Host "`n  Thank You For Using Our Services" -ForegroundColor Magenta
         Write-Host "  Sunrise Computers" -ForegroundColor Magenta
         Write-Host "`n  Exiting..." -ForegroundColor Yellow
-        Start-Sleep -Seconds 10
+        Start-Sleep -Seconds 5
         exit
     } else {
         Write-Host "`nInvalid option. Please try again." -ForegroundColor Red
-        Start-Sleep -Seconds 10
+        Start-Sleep -Seconds 2
     }
 } while ($true)
