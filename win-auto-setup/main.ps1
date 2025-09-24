@@ -132,6 +132,8 @@ Write-Host "  Since 2001 `n"
     # Network Related Settings section
     Write-Host "" -ForegroundColor DarkGray
     Write-Host "  Network Related Settings`n" -ForegroundColor Cyan
+    Write-Host "  Run At Your Own Risk!" -ForegroundColor Red
+    Write-Host "  These tweaks may disrupt network connectivity." -ForegroundColor Red
     foreach ($key in @("6","7")) {
         Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
