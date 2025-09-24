@@ -10,7 +10,7 @@ $scripts = @{
     "5" = @{ Name = "Remove Bloatware"; File = "App_Remover.ps1" }
     "6" = @{ Name = "Lanman Network Tweaks"; File = "Lanman_Network.ps1" }
     "7" = @{ Name = "Reset SMB Connection"; File = "SMB-Connection-Reset.ps1" }
-    "8" = @{ Name = "Run All Scripts"; File = "" }
+    "A" = @{ Name = "Run All Scripts"; File = "" }
 }
 
 # Function to run script (local first, then GitHub fallback)
@@ -58,18 +58,18 @@ function Invoke-Script {
 # Function to run all scripts (local first, then GitHub fallback)
 function Invoke-AllScripts {
     Write-Host "`nRunning all scripts in sequence..." -ForegroundColor Cyan
-    Write-Host "WARNING: This will run all 6 scripts automatically." -ForegroundColor Red
+    Write-Host "WARNING: This will run all scripts from 1-5 automatically." -ForegroundColor Red
     $confirm = Read-Host "Continue? (Y/N)"
     
     if ($confirm -eq "Y" -or $confirm -eq "y") {
-        $scriptOrder = @("1", "2", "3", "4","5", "6", "7")
+        $scriptOrder = @("1", "2", "3", "4","5")
         
         foreach ($key in $scriptOrder) {
             $scriptFile = $scripts[$key].File
             $scriptName = $scripts[$key].Name
             $localPath = ".\$scriptFile"
             
-            Write-Host "`n[$key/6] Running: $scriptName..." -ForegroundColor Yellow
+            Write-Host "`n[$key/5] Running: $scriptName..." -ForegroundColor Yellow
             
             # Try local first
             if (Test-Path $localPath) {
@@ -121,16 +121,23 @@ function Show-Menu {
  |_____/ \__,_|_| |_|_|  |_|___/\___|  \_____\___/|_| |_| |_| .__/ \__,_|\__\___|_|  |___/
                                                             | |                           
                                                             |_|                           "-ForegroundColor Red
-Write-Host "Performance Computing" -ForegroundColor Cyan
-Write-Host "Since 2001 `n"
+Write-Host "  Performance Computing" -ForegroundColor Cyan
+Write-Host "  Since 2001 `n"
     
-    foreach ($key in $scripts.Keys | Sort-Object) {
-        Write-Host "[$key] $($scripts[$key].Name)" -ForegroundColor White
+    # Main options
+    foreach ($key in @("1","2","3","4","5","A")) {
+        Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
-    
-    Write-Host "[0] Exit" -ForegroundColor Red
-    Write-Host ""
-    $choice = Read-Host "Choose an option"
+
+    # Network Related Settings section
+    Write-Host "" -ForegroundColor DarkGray
+    Write-Host "  Network Related Settings`n" -ForegroundColor Cyan
+    foreach ($key in @("6","7")) {
+        Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
+    }
+
+    Write-Host "`n  [0] Exit`n"-ForegroundColor Red
+    $choice = Read-Host "  Choose an option"
     return $choice
 }
 
@@ -138,13 +145,15 @@ Write-Host "Since 2001 `n"
 do {
     $choice = Show-Menu
     
-    if ($choice -eq "8") {
+    if ($choice -eq "A") {
         Invoke-AllScripts
-    } elseif ($scripts.ContainsKey($choice) -and $choice -ne "8") {
+    } elseif ($scripts.ContainsKey($choice) -and $choice -ne "A") {
         Invoke-Script -ScriptFile $scripts[$choice].File -ScriptName $scripts[$choice].Name
     } elseif ($choice -eq "0") {
-        Write-Host "`nExiting..." -ForegroundColor Yellow
-        break
+        Write-Host "`n  Thank You For Using Our Services" -ForegroundColor Magenta
+        Write-Host "  Sunrise Computers" -ForegroundColor Magenta
+        Write-Host "`n  Exiting..." -ForegroundColor Yellow
+        exit
     } else {
         Write-Host "`nInvalid option. Please try again." -ForegroundColor Red
         Start-Sleep -Seconds 1
