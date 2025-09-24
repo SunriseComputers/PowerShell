@@ -157,6 +157,6 @@ do {
         exit
     } else {
         Write-Host "`nInvalid option. Please try again." -ForegroundColor Red
-        Start-Sleep -Seconds 5
+        Start-Sleep -Seconds 10
     }
 } while ($true)
