@@ -7,6 +7,7 @@ $scripts = @{
     "5" = @{ Name = "Remove Bloatware"; File = "App_Remover.ps1" }
     "6" = @{ Name = "Lanman Network Tweaks"; File = "Lanman_Network.ps1" }
     "7" = @{ Name = "Reset SMB Connection"; File = "SMB-Connection-Reset.ps1" }
+    "8" = @{ Name = "Ethernet Link Speed"; File = "link-speed.ps1" }
     "A" = @{ Name = "Run All Scripts"; File = "" }
 }
 
@@ -161,7 +162,7 @@ Write-Host "  Since 2001 `n"
     Write-Host "  Network Related Settings`n" -ForegroundColor Cyan
     Write-Host "  Run At Your Own Risk!" -ForegroundColor Red
     Write-Host "  These tweaks may disrupt network connectivity." -ForegroundColor Red
-    foreach ($key in @("6","7")) {
+    foreach ($key in @("6","7","8")) {
         Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
 
