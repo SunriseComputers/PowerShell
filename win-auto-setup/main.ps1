@@ -1,6 +1,3 @@
-#Requires -RunAsAdministrator
-
-# Configuration
 $GITHUB_BASE = "https://raw.githubusercontent.com/SunriseComputers/PowerShell/main/win-auto-setup/Scripts"
 $scripts = @{
     "1" = @{ Name = "Install WinGet"; File = "Winget_Install.ps1" }
@@ -58,7 +55,36 @@ function Invoke-Script {
 # Function to run all scripts (local first, then GitHub fallback)
 function Invoke-AllScripts {
     Write-Host "`nRunning all scripts in sequence..." -ForegroundColor Cyan
-    Write-Host "WARNING: This will run all scripts from 1-5 automatically." -ForegroundColor Red
+    Write-Host "WARNING: This will run all scripts from 1-5 one-by-one" -ForegroundColor Red
+
+    Write-Host "1. WE will Install the Latest Version of Winget, Skip if already installed." -ForegroundColor Blue 
+    Write-Host "2. We will Install Essential Applications, which include the following apps -" -ForegroundColor Blue
+    Write-Host "   - Mozilla Firefox"
+    Write-Host "   - SumatraPDF"
+    Write-Host "   - 7zip"
+    Write-Host "   - VLC Media Player"
+    Write-Host "   - UltraViewer"
+    Write-Host "3. We will Apply  the following Performance Tweaks." -ForegroundColor Blue
+    Write-Host "   - Disable Snap Assist Flyout"
+    Write-Host "   - Delete Temporary Files"
+    Write-Host "   - Disable ConsumerFeatures"
+    Write-Host "   - Disable Telemetry"
+    Write-Host "   - Disable Activity History"
+    Write-Host "   - Disable Explorer Automatic Folder Discovery"
+    Write-Host "   - Disable GameDVR"
+    Write-Host "   - Disable Homegroup"
+    Write-Host "   - Disable Location Tracking"
+    Write-Host "   - Disable Storage Sense"
+    Write-Host "   - Disable Wi-Fi Sense"
+    Write-Host "   - Enable End Task With Right Click"
+    Write-Host "   - Set Services to Manual"
+    Write-Host "   - Enable Dark Mode"
+    Write-Host "   - Set Classic Right-Click Menu"
+    Write-Host "4. Stop Automatic Windows Updates" -ForegroundColor Blue
+    Write-Host "   - a. This Will Change the Windows Update Setting to Manual, which means it will only Update Windows when you click on 'Check Updates' inside the Settings App."
+    Write-Host "   - b. This Delay Your Security Udpates to few day. If you do a manual update it will work normally."
+    Write-Host "5. This will open a new windows where you can select the Apps that you don't want and remove them." -ForegroundColor Blue
+    
     $confirm = Read-Host "Continue? (Y/N)"
     
     if ($confirm -eq "Y" -or $confirm -eq "y") {
@@ -99,7 +125,8 @@ function Invoke-AllScripts {
         
         Write-Host "`nAll scripts completed!" -ForegroundColor Green
     } else {
-        Write-Host "`nOperation cancelled." -ForegroundColor Yellow
+        Write-Host "\nReturning to menu..." -ForegroundColor Yellow
+        return
     }
     
     Write-Host "`nPress any key to return to menu..." -ForegroundColor Yellow
@@ -155,8 +182,8 @@ do {
         Write-Host "`n  Thank You For Using Our Services" -ForegroundColor Magenta
         Write-Host "  Sunrise Computers" -ForegroundColor Magenta
         Write-Host "`n  Exiting..." -ForegroundColor Yellow
-        Start-Sleep -Seconds 5
-        exit
+        Start-Sleep -Seconds 3
+        Stop-Process -Id $PID -Force
     } else {
         Write-Host "`nInvalid option. Please try again." -ForegroundColor Red
         Start-Sleep -Seconds 2
