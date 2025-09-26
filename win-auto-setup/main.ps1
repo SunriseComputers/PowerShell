@@ -154,7 +154,7 @@ Write-Host "  Performance Computing" -ForegroundColor Cyan
 Write-Host "  Since 2001 `n"
     
     # Main options
-    foreach ($key in @("1","2","3","4","5","A","H")) {
+    foreach ($key in @("1","2","3","4","5","A")) {
         Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
 
