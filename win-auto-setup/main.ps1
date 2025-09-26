@@ -170,7 +170,7 @@ Write-Host "  Since 2001 `n"
     # Hardware Information section
     Write-Host "" -ForegroundColor DarkGray
     Write-Host "  System Information`n" -ForegroundColor Cyan
-    Write-Host "  This section provides information about the system hardware." -ForegroundColor Yellow
+    Write-Host "  This section provides information about the system hardware." -ForegroundColor Blue
     foreach ($key in @("H")) {
         Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
