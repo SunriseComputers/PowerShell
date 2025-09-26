@@ -9,6 +9,7 @@ $scripts = @{
     "7" = @{ Name = "Reset SMB Connection"; File = "SMB-Connection-Reset.ps1" }
     "8" = @{ Name = "Ethernet Link Speed"; File = "link-speed.ps1" }
     "A" = @{ Name = "Run All Scripts"; File = "" }
+    "H" = @{ Name = "Hardware Information"; File = "Hardware_Report_Generator.ps1" }
 }
 
 # Function to run script (local first, then GitHub fallback)
@@ -153,7 +154,7 @@ Write-Host "  Performance Computing" -ForegroundColor Cyan
 Write-Host "  Since 2001 `n"
     
     # Main options
-    foreach ($key in @("1","2","3","4","5","A")) {
+    foreach ($key in @("1","2","3","4","5","A","H")) {
         Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
 
@@ -163,6 +164,9 @@ Write-Host "  Since 2001 `n"
     Write-Host "  Run At Your Own Risk!" -ForegroundColor Red
     Write-Host "  These tweaks may disrupt network connectivity." -ForegroundColor Red
     foreach ($key in @("6","7","8")) {
+        Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
+    }
+    foreach ($key in @("H")) {
         Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
 
