@@ -1,17 +1,10 @@
 
 # Hardware Information Report Generator
 Write-Host "=== SYSTEM HARDWARE INFORMATION REPORT ===" -ForegroundColor Green
-Write-Host "Generated on: $(Get-Date)" -ForegroundColor Yellow
-Write-Host ""
 
 # Get Computer Name
-Write-Host "COMPUTER INFORMATION" -ForegroundColor Cyan
-Write-Host "===================" -ForegroundColor Cyan
 $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem
-Write-Host "Computer Name: $($ComputerInfo.Name)"
-Write-Host "Domain: $($ComputerInfo.Domain)"
-Write-Host "Manufacturer: $($ComputerInfo.Manufacturer)"
-Write-Host "Model: $($ComputerInfo.Model)"
+
 
 # Get System Type (UEFI/Legacy)
 $SystemType = "Unknown"
@@ -30,17 +23,10 @@ try {
 } catch {
     $SystemType = "Legacy BIOS"  # Default to Legacy BIOS if detection fails
 }
-Write-Host "System Type: $SystemType"
-Write-Host ""
 
 # Get RAM Information
-Write-Host "RAM INFORMATION" -ForegroundColor Cyan
-Write-Host "===============" -ForegroundColor Cyan
 $MemoryModules = Get-CimInstance -ClassName Win32_PhysicalMemory
 $MemorySlots = Get-CimInstance -ClassName Win32_PhysicalMemoryArray
-
-Write-Host "Total Memory Slots: $($MemorySlots.MemoryDevices)"
-Write-Host "Memory Modules Installed: $($MemoryModules.Count)"
 
 # Check XMP Profile Status
 $XMPStatus = "Unknown"
@@ -57,8 +43,6 @@ try {
     $XMPStatus = "Unable to determine"
 }
 
-Write-Host "XMP Profile Status: $XMPStatus" -ForegroundColor $(if($XMPStatus -like "*Enabled*") { "Green" } elseif($XMPStatus -like "*Disabled*") { "Yellow" } else { "Red" })
-Write-Host ""
 
 foreach ($Memory in $MemoryModules) {
     $CapacityGB = [math]::Round($Memory.Capacity / 1GB, 2)
@@ -67,21 +51,7 @@ foreach ($Memory in $MemoryModules) {
         12 { "SO-DIMM" }
         default { "Unknown" }
     }
-
-    Write-Host "RAM Slot: $($Memory.DeviceLocator)" -ForegroundColor Yellow
-    Write-Host "  Manufacturer: $($Memory.Manufacturer)"
-    Write-Host "  Capacity: $CapacityGB GB"
-    Write-Host "  Speed: $($Memory.Speed) MHz"
-    Write-Host "  Configured Speed: $($Memory.ConfiguredClockSpeed) MHz"
-    Write-Host "  Form Factor: $FormFactor"
-    Write-Host "  Part Number: $($Memory.PartNumber)"
-    Write-Host "  Serial Number: $($Memory.SerialNumber)"
-    Write-Host ""
 }
-
-# Get Storage Information (HDD and SSD)
-Write-Host "STORAGE INFORMATION" -ForegroundColor Cyan
-Write-Host "==================" -ForegroundColor Cyan
 
 # Get Physical Disks
 $PhysicalDisks = Get-PhysicalDisk
@@ -89,8 +59,6 @@ $LogicalDisks = Get-CimInstance -ClassName Win32_LogicalDisk
 
 # Determine OS Installation Drive
 $SystemDrive = $env:SystemDrive
-Write-Host "Operating System installed on: $SystemDrive" -ForegroundColor Green
-Write-Host ""
 
 foreach ($Disk in $PhysicalDisks) {
     $SizeGB = [math]::Round($Disk.Size / 1GB, 2)
@@ -100,43 +68,23 @@ foreach ($Disk in $PhysicalDisks) {
         5 { "SCM (Storage Class Memory)" }
         default { "Unknown" }
     }
-
-    Write-Host "Disk $($Disk.DeviceId): $($Disk.FriendlyName)" -ForegroundColor Yellow
-    Write-Host "  Manufacturer: $($Disk.Manufacturer)"
-    Write-Host "  Model: $($Disk.Model)"
-    Write-Host "  Type: $MediaType"
-    Write-Host "  Size: $SizeGB GB"
-    Write-Host "  Health Status: $($Disk.HealthStatus)"
-    Write-Host "  Operational Status: $($Disk.OperationalStatus)"
-
     # Get partitions for this disk
     $Partitions = Get-Partition -DiskNumber $Disk.DeviceId -ErrorAction SilentlyContinue
     if ($Partitions) {
-        Write-Host "  Partitions:"
         foreach ($Partition in $Partitions) {
             if ($Partition.DriveLetter) {
                 $LogicalDisk = $LogicalDisks | Where-Object { $_.DeviceID -eq "$($Partition.DriveLetter):" }
                 $UsedSpaceGB = [math]::Round(($LogicalDisk.Size - $LogicalDisk.FreeSpace) / 1GB, 2)
                 $FreeSpaceGB = [math]::Round($LogicalDisk.FreeSpace / 1GB, 2)
 
-                Write-Host "    Drive $($Partition.DriveLetter): ($($LogicalDisk.VolumeName))"
-                Write-Host "      Size: $([math]::Round($Partition.Size / 1GB, 2)) GB"
-                Write-Host "      Used: $UsedSpaceGB GB"
-                Write-Host "      Free: $FreeSpaceGB GB"
-                Write-Host "      File System: $($LogicalDisk.FileSystem)"
-
                 if ($Partition.DriveLetter -eq $SystemDrive.Replace(":", "")) {
-                    Write-Host "      *** OS INSTALLATION DRIVE ***" -ForegroundColor Green
                 }
             }
         }
     }
-    Write-Host ""
 }
 
 # Get Graphics Card Information
-Write-Host "GRAPHICS CARD INFORMATION" -ForegroundColor Cyan
-Write-Host "========================" -ForegroundColor Cyan
 $VideoControllers = Get-CimInstance -ClassName Win32_VideoController
 
 # Run dxdiag and parse Display Memory
@@ -156,10 +104,6 @@ foreach ($line in $gpuMemLines) {
 $gpuIdx = 0
 foreach ($GPU in $VideoControllers) {
     if ($GPU.Name -notlike "*Remote*" -and $GPU.Name -notlike "*Mirror*") {
-        Write-Host "GPU: $($GPU.Name)" -ForegroundColor Yellow
-        Write-Host "  Adapter Type: $($GPU.AdapterCompatibility)"
-        Write-Host "  Driver Version: $($GPU.DriverVersion)"
-        Write-Host "  Driver Date: $($GPU.DriverDate)"
         $dedicatedVRAM = "Unknown"
         $sharedMemory = "Unknown"
         # Use nvidia-smi for NVIDIA GPUs
@@ -187,57 +131,24 @@ foreach ($GPU in $VideoControllers) {
                 $sharedMemory += " [Warning: Value unusually high, may include shared memory]"
             }
         }
-        Write-Host "  Dedicated VRAM: $dedicatedVRAM"
-        Write-Host "  Shared Memory: $sharedMemory"
-        Write-Host "  Current Resolution: $($GPU.CurrentHorizontalResolution) x $($GPU.CurrentVerticalResolution)"
-        Write-Host "  Current Refresh Rate: $($GPU.CurrentRefreshRate) Hz"
-        Write-Host "  Status: $($GPU.Status)"
-        Write-Host ""
         $gpuIdx++
     }
 }
 
 # Get Processor Information
-Write-Host "PROCESSOR INFORMATION" -ForegroundColor Cyan
-Write-Host "====================" -ForegroundColor Cyan
 $Processors = Get-CimInstance -ClassName Win32_Processor
 
 foreach ($CPU in $Processors) {
-    Write-Host "Processor: $($CPU.Name)" -ForegroundColor Yellow
-    Write-Host "  Manufacturer: $($CPU.Manufacturer)"
-    Write-Host "  Architecture: $($CPU.Architecture)"
-    Write-Host "  Family: $($CPU.Family)"
-    Write-Host "  Model: $($CPU.Model)"
-    Write-Host "  Stepping: $($CPU.Stepping)"
-    Write-Host "  Physical Cores: $($CPU.NumberOfCores)"
-    Write-Host "  Logical Processors (Threads): $($CPU.NumberOfLogicalProcessors)"
-    Write-Host "  Current Clock Speed: $($CPU.CurrentClockSpeed) MHz"
-    Write-Host "  Max Clock Speed: $($CPU.MaxClockSpeed) MHz"
-    Write-Host "  Socket Designation: $($CPU.SocketDesignation)"
-    Write-Host "  L2 Cache Size: $([math]::Round($CPU.L2CacheSize / 1KB, 0)) KB" -ErrorAction SilentlyContinue
-    Write-Host "  L3 Cache Size: $([math]::Round($CPU.L3CacheSize / 1KB, 0)) KB" -ErrorAction SilentlyContinue
-    Write-Host ""
 }
 
 # Generate Summary Report
-Write-Host "SYSTEM SUMMARY" -ForegroundColor Cyan
-Write-Host "==============" -ForegroundColor Cyan
 $TotalRAM = ($MemoryModules | Measure-Object -Property Capacity -Sum).Sum / 1GB
 $TotalStorage = ($PhysicalDisks | Measure-Object -Property Size -Sum).Sum / 1GB
-
-Write-Host "Computer: $($ComputerInfo.Name)"
-Write-Host "Total RAM: $([math]::Round($TotalRAM, 2)) GB ($($MemoryModules.Count) modules)"
-Write-Host "Total Storage: $([math]::Round($TotalStorage, 2)) GB"
-Write-Host "CPU: $($Processors[0].Name) ($($Processors[0].NumberOfCores) cores, $($Processors[0].NumberOfLogicalProcessors) threads)"
-Write-Host "GPU(s): $($VideoControllers.Count) graphics adapter(s)"
-Write-Host ""
 
 # Automatically export report to desktop
 $FileName = "Hardware_Report_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
 $DesktopPath = [Environment]::GetFolderPath('Desktop')
 $FilePath = Join-Path $DesktopPath $FileName
-
-Write-Host "Exporting hardware report to desktop..." -ForegroundColor Yellow
 
 # Create a simple text report without duplicating all the code
 $ReportContent = @"
@@ -400,10 +311,9 @@ GPU(s): $($VideoControllers.Count) graphics adapter(s)
 # Write to file
 try {
     $ReportContent | Out-File -FilePath $FilePath -Encoding UTF8
-    Write-Host "Hardware report automatically exported to desktop!" -ForegroundColor Green
+    Write-Host "===================" -ForegroundColor Cyan
+    Write-Host "Scan Report saved to DESKTOP!" -ForegroundColor Green
     Write-Host "File saved as: $FileName" -ForegroundColor Cyan
 } catch {
     Write-Host "Error saving report: $($_.Exception.Message)" -ForegroundColor Red
 }
-
-Write-Host "Hardware inventory complete!" -ForegroundColor Green
