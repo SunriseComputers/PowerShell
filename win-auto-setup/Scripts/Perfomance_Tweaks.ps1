@@ -2,20 +2,20 @@
 
 # Load the tweaks configuration
 $tweaksConfig = @'
+{
   "DisableSnapAssistFlyout": {
     "Content": "Disable Snap Assist Flyout",
     "Description": "Turns off the Snap Assist Flyout feature in Windows.",
     "category": "Performance",
     "registry": [
       {
-        "Path": "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
+        "Path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
         "Name": "SnapAssistFlyoutEnabled",
         "Type": "DWord",
         "Value": "0"
       }
     ]
   },
-{
   "DeleteTempFiles": {
     "Content": "Delete Temporary Files",
     "Description": "Deletes temporary files to free up disk space.",
