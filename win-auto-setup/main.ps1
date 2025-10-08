@@ -1,10 +1,3 @@
-# ===============================================================================
-# PowerShell Windows Auto-Setup Tool - GitHub Version
-# ===============================================================================
-# 
-# This script is designed to be run directly from GitHub using:
-# irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main.ps1 | iex
-#
 # Repository structure:
 # ├── win-auto-setup/
 # │   ├── main.ps1 (this file)
@@ -57,24 +50,17 @@ if (-not (Test-IsAdmin)) {
         $isFromGitHub = $MyInvocation.MyCommand.Definition -match "Temp|AppData.*Temp"
         
         if ($isFromGitHub) {
-            # Running from GitHub - use the GitHub URL
-            $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main.ps1 | iex"
-            $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$command`""
+            # Running from GitHub - use simpler approach
+            $arguments = "-ExecutionPolicy Bypass -Command `"irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main.ps1 | iex`""
         } else {
             # Running from local file
             $scriptPath = $MyInvocation.MyCommand.Definition
-            $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
+            $arguments = "-ExecutionPolicy Bypass -File `"$scriptPath`""
         }
 
-        # Add AutoRun parameter if it was provided
-        if ($AutoRun) {
-            if ($isFromGitHub) {
-                # For GitHub execution, we need to pass the parameter differently
-                $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main.ps1 | iex; if (`$?) { & { param(`$AutoRun='$AutoRun') } }"
-                $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$command`""
-            } else {
-                $arguments += " -AutoRun `"$AutoRun`""
-            }
+        # Add AutoRun parameter if it was provided (only for local files)
+        if ($AutoRun -and -not $isFromGitHub) {
+            $arguments += " -AutoRun `"$AutoRun`""
         }
 
         # Start elevated PowerShell process
