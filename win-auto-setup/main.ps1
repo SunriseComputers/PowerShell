@@ -91,11 +91,18 @@ if (-not (Test-IsAdmin)) {
 # Set execution policy to Unrestricted
 Write-Host "Setting execution policy to Unrestricted..." -ForegroundColor Cyan
 try {
-    Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope LocalMachine -Force
-    Write-Host "Execution policy set to Unrestricted successfully." -ForegroundColor Green
+    # Try CurrentUser scope first (less intrusive)
+    Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser -Force
+    Write-Host "Execution policy set to Unrestricted for current user successfully." -ForegroundColor Green
 } catch {
-    Write-Host "Warning: Could not set execution policy. Error: $($_.Exception.Message)" -ForegroundColor Yellow
-    Write-Host "The script will continue, but some operations may fail." -ForegroundColor Yellow
+    try {
+        # Fallback to Process scope if CurrentUser fails
+        Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process -Force
+        Write-Host "Execution policy set to Unrestricted for current process successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Warning: Could not set execution policy. Error: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "The script will continue, but some operations may fail." -ForegroundColor Yellow
+    }
 }
 Write-Host ""
 
@@ -2137,16 +2144,13 @@ if ($logoImage) {
         $response = Invoke-WebRequest -Uri $logoUrl -Method Head -ErrorAction Stop
         
         if ($response.StatusCode -eq 200) {
-            # Use Invoke-RestMethod to download the image as bytes
-            $imageBytes = Invoke-RestMethod -Uri $logoUrl -Method Get -ContentType "application/octet-stream"
-            
-            # Convert to byte array if needed
-            if ($imageBytes -is [string]) {
-                $imageBytes = [System.Text.Encoding]::Latin1.GetBytes($imageBytes)
-            }
+            # Download the image as raw bytes
+            $webClient = New-Object System.Net.WebClient
+            $imageBytes = $webClient.DownloadData($logoUrl)
+            $webClient.Dispose()
             
             # Create bitmap from byte array
-            $memoryStream = New-Object System.IO.MemoryStream($imageBytes)
+            $memoryStream = New-Object System.IO.MemoryStream(,$imageBytes)
             $bitmap = New-Object System.Windows.Media.Imaging.BitmapImage
             $bitmap.BeginInit()
             $bitmap.StreamSource = $memoryStream
