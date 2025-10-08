@@ -1,10 +1,3 @@
-# ===============================================================================
-# PowerShell Windows Auto-Setup Tool - GitHub Version
-# ===============================================================================
-# 
-# This script is designed to be run directly from GitHub using:
-# irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main.ps1 | iex
-#
 # Repository structure:
 # ├── win-auto-setup/
 # │   ├── main.ps1 (this file)
@@ -51,60 +44,64 @@ if (-not (Test-IsAdmin)) {
     Write-Host "Starting elevated PowerShell session..." -ForegroundColor Cyan
     Write-Host "Please accept the UAC prompt to continue." -ForegroundColor Yellow
     Write-Host ""
-    
+
     try {
-        # Get the current script path
-        $scriptPath = $MyInvocation.MyCommand.Definition
+        # Check if running from GitHub (temp file) vs local file
+        $isFromGitHub = $MyInvocation.MyCommand.Definition -match "Temp|AppData.*Temp"
         
-        # Prepare arguments for the elevated process
-        $arguments = "-ExecutionPolicy Bypass -File `"$scriptPath`""
-        
+        if ($isFromGitHub) {
+            # Running from GitHub - use the GitHub URL
+            $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/UI_Main.ps1 | iex"
+            $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$command`""
+        } else {
+            # Running from local file
+            $scriptPath = $MyInvocation.MyCommand.Definition
+            $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
+        }
+
         # Add AutoRun parameter if it was provided
         if ($AutoRun) {
-            $arguments += " -AutoRun `"$AutoRun`""
+            if ($isFromGitHub) {
+                # For GitHub execution, we need to pass the parameter differently
+                $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/UI_Main.ps1 | iex; if (`$?) { & { param(`$AutoRun='$AutoRun') } }"
+                $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$command`""
+            } else {
+                $arguments += " -AutoRun `"$AutoRun`""
+            }
         }
-        
+
         # Start elevated PowerShell process
-        Start-Process powershell -ArgumentList $arguments -Verb RunAs
-        
+        $process = Start-Process powershell -ArgumentList $arguments -Verb RunAs -PassThru
+
         Write-Host "Elevated session started. This window will close." -ForegroundColor Green
-        Write-Host "Please continue in the new Administrator window." -ForegroundColor Cyan
-        Start-Sleep -Seconds 2
+        Write-Host "The UI will appear in the new Administrator window." -ForegroundColor Cyan
+        Start-Sleep -Seconds 3
         exit 0
-        
+
     } catch {
         Write-Host ""
         Write-Host "ERROR: Failed to start elevated session." -ForegroundColor Red
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host ""
-        Write-Host "Please manually run PowerShell as Administrator:" -ForegroundColor Yellow
-        Write-Host "1. Right-click on PowerShell" -ForegroundColor White
-        Write-Host "2. Select 'Run as Administrator'" -ForegroundColor White
-        Write-Host "3. Run this script again" -ForegroundColor White
+        Write-Host "Please manually run PowerShell as Administrator and use:" -ForegroundColor Yellow
+        Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/UI_Main.ps1 | iex" -ForegroundColor White
         Write-Host ""
         Write-Host "Press any key to exit..." -ForegroundColor Gray
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         exit 1
     }
-}
-
-# Set execution policy to Unrestricted
-Write-Host "Setting execution policy to Unrestricted..." -ForegroundColor Cyan
+}# Set execution policy to Unrestricted
 try {
     # Try CurrentUser scope first (less intrusive)
     Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser -Force
-    Write-Host "Execution policy set to Unrestricted for current user successfully." -ForegroundColor Green
 } catch {
     try {
         # Fallback to Process scope if CurrentUser fails
         Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process -Force
-        Write-Host "Execution policy set to Unrestricted for current process successfully." -ForegroundColor Green
     } catch {
-        Write-Host "Warning: Could not set execution policy. Error: $($_.Exception.Message)" -ForegroundColor Yellow
-        Write-Host "The script will continue, but some operations may fail." -ForegroundColor Yellow
+        # Silent failure - script will continue
     }
 }
-Write-Host ""
 
 # Load required assemblies for WPF
 Add-Type -AssemblyName PresentationFramework
@@ -168,7 +165,6 @@ function Invoke-GitHubScript {
             return & $scriptBlock
         }
     } catch {
-        Write-Host "Error executing script from GitHub: $($_.Exception.Message)" -ForegroundColor Red
         throw
     }
 }
@@ -182,7 +178,6 @@ function Get-GitHubFileContent {
     try {
         return Invoke-RestMethod -Uri $fileUrl -UseBasicParsing
     } catch {
-        Write-Host "Error downloading file from GitHub: $($_.Exception.Message)" -ForegroundColor Red
         throw
     }
 }
@@ -459,10 +454,8 @@ These tweaks will enhance system responsiveness, improve startup times, and opti
         try {
             # Execute the script without any arguments (auto mode)
             Invoke-GitHubScript 'Perfomance_Tweaks.ps1'
-            Write-Host "Performance tweaks applied successfully."
             [System.Windows.MessageBox]::Show("All performance tweaks have been applied successfully!", "Performance Tweaks Complete", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
         } catch {
-            Write-Host "Error applying performance tweaks: $($_.Exception.Message)" -ForegroundColor Red
             [System.Windows.MessageBox]::Show("Error applying performance tweaks: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
         }
     })
@@ -705,7 +698,6 @@ function global:Remove-SelectedApps {
     if ($rightPanelBorder -and $rightPanelBorder.Child -and $rightPanelBorder.Child.Content) {
         $rightPanelStack = $rightPanelBorder.Child.Content
     } else {
-        Write-Host "Could not find right panel for progress updates"
         return
     }
     
@@ -915,10 +907,10 @@ function Add-MenuItem {
                 global:Show-AppSelection
             }
         } catch {
-            [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)", "Debug Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)", "Script Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
         }
     }.GetNewClosure())
-    $leftPanelStack.Children.Add($item)
+    $leftPanelStack.Children.Add($item) | Out-Null
 }
 
 function global:Show-ScriptDescription {
@@ -1039,20 +1031,10 @@ function global:Show-RunAllOption {
             
             foreach ($script in $scripts) {
                 try {
-                    # Execute directly from GitHub (already admin)
                     Invoke-GitHubScript $script
                 } catch {
                     $failedScripts += $script
-                    Write-Host "Failed to execute: $script"
                 }
-            }
-            
-            # Log completion status
-            if ($failedScripts.Count -eq 0) {
-                Write-Host "All scripts have been executed successfully."
-            } else {
-                Write-Host "Some scripts failed or were not found:"
-                $failedScripts | ForEach-Object { Write-Host "  - $_" }
             }
         })
         $rightPanelStack.Children.Add($runAllBtn)
@@ -1074,7 +1056,7 @@ function global:Show-MainMenu {
         $titleBlock.Foreground = 'White'
         $titleBlock.Margin = '0,0,0,24'
         $titleBlock.FontFamily = 'Segoe UI'
-        $leftPanelStack.Children.Add($titleBlock)
+        $leftPanelStack.Children.Add($titleBlock) | Out-Null
         
         # Add main menu items
         Add-MenuItem $leftPanelStack '1. General Tweaks' ''
@@ -1103,7 +1085,7 @@ function global:Show-WelcomePanel {
             $welcomeTitle.Margin = '0,0,0,2'
             $welcomeTitle.FontFamily = 'Segoe UI'
             $welcomeTitle.TextAlignment = 'Center'
-            $rightPanelStack.Children.Add($welcomeTitle)
+            $rightPanelStack.Children.Add($welcomeTitle) | Out-Null
             
             $companyTitle = New-Object System.Windows.Controls.TextBlock
             $companyTitle.Text = 'Sunrise Computers'
@@ -1113,14 +1095,14 @@ function global:Show-WelcomePanel {
             $companyTitle.Margin = '0,0,0,0'
             $companyTitle.FontFamily = 'Segoe UI'
             $companyTitle.TextAlignment = 'Center'
-            $rightPanelStack.Children.Add($companyTitle)
+            $rightPanelStack.Children.Add($companyTitle) | Out-Null
             
             $instructionTitle = New-Object System.Windows.Controls.TextBlock
             $instructionTitle.Text = 'Select a Category from the list on the left to get started.'
             $instructionTitle.FontSize = 22
             $instructionTitle.Foreground = 'White'
             $instructionTitle.FontFamily = 'Segoe UI'
-            $rightPanelStack.Children.Add($instructionTitle)
+            $rightPanelStack.Children.Add($instructionTitle) | Out-Null
         }
     }
 }
@@ -2165,21 +2147,12 @@ if ($logoImage) {
             
             # Clean up
             $memoryStream.Dispose()
-            
-            Write-Host "Logo loaded successfully from GitHub" -ForegroundColor Green
         } else {
             throw "Logo file not found (HTTP $($response.StatusCode))"
         }
     } catch {
         # If logo loading fails, hide the logo and continue gracefully
-        Write-Host "Could not load logo from GitHub: $($_.Exception.Message)" -ForegroundColor Yellow
-        Write-Host "Note: Make sure 'Files/S_Logo.png' exists in your GitHub repository" -ForegroundColor Yellow
-        
-        # Hide the logo image element if loading fails
         $logoImage.Visibility = 'Collapsed'
-        
-        # Optionally, you could set a default text or icon here
-        # For now, we'll just continue without the logo
     }
 }
 
@@ -2213,12 +2186,11 @@ Show-MainMenu
 
 # Auto-run functionality for elevated restart
 if ($AutoRun -eq "Lanman") {
-    # Automatically navigate to Network menu and execute Lanman script
     try {
         global:Show-NetworkMenu
         global:Show-LanmanResults
     } catch {
-        Write-Host "Error in auto-run: $($_.Exception.Message)"
+        # Silent failure
     }
 }
 
