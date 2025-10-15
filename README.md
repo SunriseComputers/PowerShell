@@ -8,7 +8,7 @@ Usage
 irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main.ps1 | iex
 ```
 
-- For more Advanced UI Version use the LINK below.
+- For more Advanced UI Version use the LINK below. - Under Construction but Works
   
 ```ps1
 irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex
