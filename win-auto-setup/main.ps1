@@ -1,6 +1,6 @@
 # Repository structure:
 # ├── win-auto-setup/
-# │   ├── main.ps1 (this file)
+# │   ├── main_UI.ps1 (this file)
 # │   ├── Scripts/
 # │   │   ├── Perfomance_Tweaks.ps1
 # │   │   ├── Winget_Install.ps1
@@ -51,7 +51,7 @@ if (-not (Test-IsAdmin)) {
         
         if ($isFromGitHub) {
             # Running from GitHub - use the GitHub URL
-            $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main.ps1 | iex"
+            $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex"
             $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$command`""
         } else {
             # Running from local file
@@ -63,7 +63,7 @@ if (-not (Test-IsAdmin)) {
         if ($AutoRun) {
             if ($isFromGitHub) {
                 # For GitHub execution, we need to pass the parameter differently
-                $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main.ps1 | iex; if (`$?) { & { param(`$AutoRun='$AutoRun') } }"
+                $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex; if (`$?) { & { param(`$AutoRun='$AutoRun') } }"
                 $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$command`""
             } else {
                 $arguments += " -AutoRun `"$AutoRun`""
@@ -84,7 +84,7 @@ if (-not (Test-IsAdmin)) {
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host ""
         Write-Host "Please manually run PowerShell as Administrator and use:" -ForegroundColor Yellow
-        Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main.ps1 | iex" -ForegroundColor White
+        Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor White
         Write-Host ""
         Write-Host "Press any key to exit..." -ForegroundColor Gray
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
