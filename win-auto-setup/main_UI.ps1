@@ -1545,7 +1545,8 @@ function global:Show-MassGraveMenu {
                 try {
                     # Show confirmation dialog
                     $result = [System.Windows.MessageBox]::Show(
-                        "This will run the Microsoft Activation Scripts (MAS) from the official repository.`n`nAre you sure you want to continue?",  
+                        "This will run the Microsoft Activation Scripts (MAS) from the official repository.`n`nAre you sure you want to continue?",
+                        "Run Microsoft Activation Scripts",
                         [System.Windows.MessageBoxButton]::YesNo, 
                         [System.Windows.MessageBoxImage]::Question
                     )
