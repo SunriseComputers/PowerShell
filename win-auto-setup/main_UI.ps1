@@ -1047,22 +1047,30 @@ function global:Apply-SelectedTweaks {
                             $progressText.Text += "  Could not start Disk Cleanup: $($_.Exception.Message)`n"
                             $progressText.Text += "  Running alternative cleanup...`n"
                             
-                            # Fallback to manual temp file cleanup
-                            Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-                            Get-ChildItem -Path 'C:\Windows\Temp' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-                            $progressText.Text += "  Manual temp file cleanup completed!`n"
-                            $success = $true
+                            # Safer fallback cleanup - avoid hanging
+                            try {
+                                $tempFiles = Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) }
+                                $tempFiles | Remove-Item -Force -ErrorAction SilentlyContinue
+                                $progressText.Text += "  Manual temp file cleanup completed!`n"
+                                $success = $true
+                            } catch {
+                                $progressText.Text += "  Manual cleanup failed: $($_.Exception.Message)`n"
+                                $success = $false
+                            }
                         }
                         
                     } catch {
                         $progressText.Text += "  Error with cleanup process: $($_.Exception.Message)`n"
                         $progressText.Text += "  Running basic fallback cleanup...`n"
                         try {
-                            Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+                            # Very basic cleanup - just user temp files
+                            $userTempFiles = Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-1) }
+                            $userTempFiles | Remove-Item -Force -ErrorAction SilentlyContinue
                             $progressText.Text += "  Basic cleanup completed.`n"
                             $success = $true
                         } catch {
                             $progressText.Text += "  Fallback cleanup failed: $($_.Exception.Message)`n"
+                            $success = $false
                         }
                     }
                 }
@@ -1070,13 +1078,42 @@ function global:Apply-SelectedTweaks {
                 "DeleteTempFiles" {
                     try {
                         $progressText.Text += "  Deleting temporary files...`n"
-                        Get-ChildItem -Path $env:TEMP -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-                        Get-ChildItem -Path 'C:\Windows\Temp' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-                        Get-ChildItem -Path 'C:\Windows\Prefetch' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-                        $progressText.Text += "  Temporary files deleted successfully!`n"
+                        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+                        
+                        # Safer temp file cleanup - avoid recursion issues
+                        $tempPaths = @($env:TEMP, 'C:\Windows\Temp', 'C:\Windows\Prefetch')
+                        $cleanedCount = 0
+                        
+                        foreach ($tempPath in $tempPaths) {
+                            if (Test-Path $tempPath) {
+                                try {
+                                    $progressText.Text += "  Cleaning: $tempPath...`n"
+                                    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+                                    
+                                    # Get files only (not directories) and delete safely
+                                    $files = Get-ChildItem -Path $tempPath -File -ErrorAction SilentlyContinue | Where-Object { 
+                                        -not $_.PSIsContainer -and $_.LastWriteTime -lt (Get-Date).AddDays(-1) 
+                                    }
+                                    
+                                    foreach ($file in $files) {
+                                        try {
+                                            Remove-Item $file.FullName -Force -ErrorAction SilentlyContinue
+                                            $cleanedCount++
+                                        } catch {
+                                            # Skip files that can't be deleted (in use, etc.)
+                                        }
+                                    }
+                                } catch {
+                                    $progressText.Text += "  Warning: Could not clean $tempPath`: $($_.Exception.Message)`n"
+                                }
+                            }
+                        }
+                        
+                        $progressText.Text += "  Cleaned $cleanedCount temporary files successfully!`n"
                         $success = $true
                     } catch {
                         $progressText.Text += "  Error deleting temp files: $($_.Exception.Message)`n"
+                        $success = $false
                     }
                 }
                 
