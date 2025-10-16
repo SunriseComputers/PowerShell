@@ -57,55 +57,50 @@ if (-not (Test-IsAdmin)) {
                        ($null -ne $scriptSource -and [string]::IsNullOrEmpty($scriptPath))
         
         if ($isFromGitHub) {
-            # Running from GitHub/irm - need to download and save the script
+            # Running from GitHub/irm - use simpler approach
             Write-Host "Detected irm/GitHub execution - preparing for elevation..." -ForegroundColor Yellow
             
-            # Create a simple elevation script that downloads and runs the main script
-            $tempScriptPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "SunriseComputers_Elevator_$(Get-Date -Format 'yyyyMMddHHmmss').ps1")
+            # For irm execution, use direct PowerShell command instead of saved script
+            # This avoids file system issues and double downloads
+            Write-Host "Creating direct elevation command..." -ForegroundColor Green
             
-            # Create an elevator script that will download and run the main UI script
-            $elevatorScript = @"
-# Elevator script for Sunrise Computers UI
-Write-Host "Downloading and starting Sunrise Computers UI..." -ForegroundColor Cyan
-
-try {
-    # Download and execute the main script
-    Invoke-RestMethod -Uri "https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1" -UseBasicParsing | Invoke-Expression
-} catch {
-    Write-Host "Error downloading script: `$(`$_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Press any key to exit..." -ForegroundColor Gray
-    `$null = `$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-}
-"@
+            # Build the elevation command that will run the irm directly
+            $irmCommand = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex"
             
-            try {
-                # Save the elevator script
-                $elevatorScript | Out-File -FilePath $tempScriptPath -Encoding UTF8 -Force
-                Write-Host "Elevator script created: $tempScriptPath" -ForegroundColor Green
-                $scriptToRun = $tempScriptPath
-                
-            } catch {
-                Write-Host "Failed to create elevator script: $($_.Exception.Message)" -ForegroundColor Red
-                Write-Host "Please run PowerShell as Administrator and use:" -ForegroundColor Yellow
-                Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor White
-                Read-Host "Press Enter to exit"
-                exit 1
+            # Build PowerShell arguments for direct command execution
+            $arguments = @(
+                "-ExecutionPolicy", "Bypass",
+                "-NoProfile",
+                "-Command", "`"$irmCommand`""
+            )
+            
+            if ($AutoRun) {
+                # For AutoRun with irm, we need to modify the approach
+                $irmCommandWithAutoRun = "(`$autoRun = '$AutoRun'); irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex"
+                $arguments = @(
+                    "-ExecutionPolicy", "Bypass",
+                    "-NoProfile",
+                    "-Command", "`"$irmCommandWithAutoRun`""
+                )
             }
+            
+            # Skip the file-based elevation completely for irm
+            $scriptToRun = $null
         } else {
             # Running from local file
             Write-Host "Detected local file execution" -ForegroundColor Green
             $scriptToRun = $scriptPath
-        }
-
-        # Build PowerShell arguments
-        $arguments = @(
-            "-ExecutionPolicy", "Bypass",
-            "-NoProfile",
-            "-File", "`"$scriptToRun`""
-        )
-        
-        if ($AutoRun) {
-            $arguments += @("-AutoRun", "`"$AutoRun`"")
+            
+            # Build PowerShell arguments for file execution
+            $arguments = @(
+                "-ExecutionPolicy", "Bypass",
+                "-NoProfile",
+                "-File", "`"$scriptToRun`""
+            )
+            
+            if ($AutoRun) {
+                $arguments += @("-AutoRun", "`"$AutoRun`"")
+            }
         }
 
         # Start elevated PowerShell process
@@ -1152,16 +1147,225 @@ function global:Apply-SelectedTweaks {
                     }
                 }
                 
-                default {
-                    # For other tweaks, try to execute them using the original script method
+                "DisableSnapAssistFlyout" {
                     try {
-                        $progressText.Text += "  Executing via performance tweaks script...`n"
-                        $result = Invoke-GitHubScript 'Perfomance_Tweaks.ps1' -ErrorAction Stop
-                        $progressText.Text += "  Executed successfully via main script.`n"
+                        $progressText.Text += "  Disabling Snap Assist Flyout...`n"
+                        if (!(Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "EnableSnapAssistFlyout" -Value 0 -Type DWord
+                        $progressText.Text += "  Snap Assist Flyout disabled successfully!`n"
                         $success = $true
                     } catch {
-                        $progressText.Text += "  Could not execute $($selectedTweak.Title): $($_.Exception.Message)`n"
+                        $progressText.Text += "  Error disabling Snap Assist Flyout: $($_.Exception.Message)`n"
                     }
+                }
+                
+                "DisableConsumerFeatures" {
+                    try {
+                        $progressText.Text += "  Disabling consumer features...`n"
+                        if (!(Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent")) {
+                            New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableWindowsConsumerFeatures" -Value 1 -Type DWord
+                        $progressText.Text += "  Consumer features disabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error disabling consumer features: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "DisableActivityHistory" {
+                    try {
+                        $progressText.Text += "  Disabling activity history...`n"
+                        if (!(Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System")) {
+                            New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableActivityFeed" -Value 0 -Type DWord
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "PublishUserActivities" -Value 0 -Type DWord
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "UploadUserActivities" -Value 0 -Type DWord
+                        $progressText.Text += "  Activity history disabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error disabling activity history: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "SetClassicRightClickMenu" {
+                    try {
+                        $progressText.Text += "  Setting classic right-click menu...`n"
+                        if (!(Test-Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}")) {
+                            New-Item -Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}" -Force | Out-Null
+                        }
+                        if (!(Test-Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32")) {
+                            New-Item -Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" -Name "(Default)" -Value "" -Type String
+                        $progressText.Text += "  Classic right-click menu enabled! (Restart Explorer to see changes)`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error setting classic right-click menu: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "EnableEndTaskRightClick" {
+                    try {
+                        $progressText.Text += "  Enabling End Task right-click option...`n"
+                        if (!(Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarDeveloperSettings" -Value 1 -Type DWord
+                        $progressText.Text += "  End Task right-click option enabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error enabling End Task right-click: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "DisableExplorerAutoDiscovery" {
+                    try {
+                        $progressText.Text += "  Disabling Explorer auto folder discovery...`n"
+                        if (!(Test-Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell" -Force | Out-Null
+                        }
+                        if (!(Test-Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU" -Force | Out-Null
+                        }
+                        if (!(Test-Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell" -Name "BagMRU Size" -Value 5000 -Type DWord
+                        $progressText.Text += "  Explorer auto discovery disabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error disabling Explorer auto discovery: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "DisableGameDVR" {
+                    try {
+                        $progressText.Text += "  Disabling GameDVR...`n"
+                        if (!(Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR")) {
+                            New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Name "AllowGameDVR" -Value 0 -Type DWord
+                        if (!(Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR" -Name "AppCaptureEnabled" -Value 0 -Type DWord
+                        $progressText.Text += "  GameDVR disabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error disabling GameDVR: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "DisableLocationTracking" {
+                    try {
+                        $progressText.Text += "  Disabling location tracking...`n"
+                        if (!(Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location")) {
+                            New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" -Name "Value" -Value "Deny" -Type String
+                        if (!(Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" -Name "Value" -Value "Deny" -Type String
+                        $progressText.Text += "  Location tracking disabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error disabling location tracking: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "DisableWiFiSense" {
+                    try {
+                        $progressText.Text += "  Disabling Wi-Fi Sense...`n"
+                        if (!(Test-Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting")) {
+                            New-Item -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting" -Force | Out-Null
+                        }
+                        if (!(Test-Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots")) {
+                            New-Item -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting" -Name "Value" -Value 0 -Type DWord
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots" -Name "Value" -Value 0 -Type DWord
+                        $progressText.Text += "  Wi-Fi Sense disabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error disabling Wi-Fi Sense: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "DisableStorageSense" {
+                    try {
+                        $progressText.Text += "  Disabling Storage Sense...`n"
+                        if (!(Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense" -Force | Out-Null
+                        }
+                        if (!(Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters" -Force | Out-Null
+                        }
+                        if (!(Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name "01" -Value 0 -Type DWord
+                        $progressText.Text += "  Storage Sense disabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error disabling Storage Sense: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "DisableHomegroup" {
+                    try {
+                        $progressText.Text += "  Disabling Homegroup...`n"
+                        # Stop and disable HomeGroup services if they exist
+                        $services = @('HomeGroupListener', 'HomeGroupProvider')
+                        foreach ($service in $services) {
+                            try {
+                                $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
+                                if ($svc) {
+                                    Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                                    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+                                }
+                            } catch {
+                                # Service might not exist, continue
+                            }
+                        }
+                        $progressText.Text += "  Homegroup services disabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error disabling Homegroup: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "SetServicesManual" {
+                    try {
+                        $progressText.Text += "  Setting services to manual startup...`n"
+                        $servicesToManual = @('Themes', 'SysMain', 'DiagTrack', 'dmwappushservice', 'WSearch', 'RetailDemo', 'RemoteAccess', 'RemoteRegistry')
+                        $setCount = 0
+                        foreach ($serviceName in $servicesToManual) {
+                            try {
+                                $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+                                if ($service) {
+                                    Set-Service -Name $serviceName -StartupType Manual -ErrorAction SilentlyContinue
+                                    $setCount++
+                                }
+                            } catch {
+                                # Service might not exist, continue
+                            }
+                        }
+                        $progressText.Text += "  Set $setCount services to manual startup successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error setting services to manual: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                default {
+                    # This should no longer be called since all tweaks are now implemented above
+                    $progressText.Text += "  Unknown tweak: $($selectedTweak.Title) - skipping...`n"
+                    $success = $false
                 }
             }
             
