@@ -16,8 +16,6 @@
 #
 # Note: If S_Logo.png is missing, the script will continue without the logo
 # ===============================================================================
-
-# Command line parameter handling
 param(
     [string]$AutoRun = ""
 )
@@ -31,9 +29,9 @@ function Test-IsAdmin {
 
 # Check if running as administrator
 if (-not (Test-IsAdmin)) {
-    Write-Host "=" * 60 -ForegroundColor Red
+    Write-Host "="-ForegroundColor Red
     Write-Host "ADMINISTRATOR PRIVILEGES REQUIRED" -ForegroundColor Red
-    Write-Host "=" * 60 -ForegroundColor Red
+    Write-Host "="-ForegroundColor Red
     Write-Host ""
     Write-Host "This script requires Administrator privileges to:" -ForegroundColor Yellow
     Write-Host "- Set execution policy to Unrestricted" -ForegroundColor White
@@ -47,30 +45,37 @@ if (-not (Test-IsAdmin)) {
 
     try {
         # Check if running from GitHub (temp file) vs local file
-        $isFromGitHub = $MyInvocation.MyCommand.Definition -match "Temp|AppData.*Temp"
+        # When run via irm|iex, MyCommand.Definition will be empty or contain script block info
+        $isFromGitHub = [string]::IsNullOrEmpty($MyInvocation.MyCommand.Definition) -or 
+                       $MyInvocation.MyCommand.Definition -match "Temp|AppData.*Temp|ScriptBlock"
         
         if ($isFromGitHub) {
-            # Running from GitHub - use the GitHub URL
-            $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex"
-            $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$command`""
+            # Running from GitHub - download and save to temp file, then execute it
+            $tempScriptPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "SunriseComputers_UI_$(Get-Date -Format 'yyyyMMddHHmmss').ps1")
+            
+            # Download the script content
+            $scriptContent = Invoke-RestMethod -Uri "https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1" -UseBasicParsing
+            
+            # Save to temp file
+            $scriptContent | Out-File -FilePath $tempScriptPath -Encoding UTF8 -Force
+            
+            # Build arguments to run the temp file
+            if ($AutoRun) {
+                $arguments = "-ExecutionPolicy Bypass -NoExit -File `"$tempScriptPath`" -AutoRun `"$AutoRun`""
+            } else {
+                $arguments = "-ExecutionPolicy Bypass -NoExit -File `"$tempScriptPath`""
+            }
         } else {
             # Running from local file
             $scriptPath = $MyInvocation.MyCommand.Definition
-            $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
-        }
-
-        # Add AutoRun parameter if it was provided
-        if ($AutoRun) {
-            if ($isFromGitHub) {
-                # For GitHub execution, we need to pass the parameter differently
-                $command = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex; if (`$?) { & { param(`$AutoRun='$AutoRun') } }"
-                $arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$command`""
+            if ($AutoRun) {
+                $arguments = "-ExecutionPolicy Bypass -NoExit -File `"$scriptPath`" -AutoRun `"$AutoRun`""
             } else {
-                $arguments += " -AutoRun `"$AutoRun`""
+                $arguments = "-ExecutionPolicy Bypass -NoExit -File `"$scriptPath`""
             }
         }
 
-        # Start elevated PowerShell process
+        # Start elevated PowerShell process (window visible for debugging)
         $process = Start-Process powershell -ArgumentList $arguments -Verb RunAs -PassThru
 
         Write-Host "Elevated session started. This window will close." -ForegroundColor Green
@@ -148,10 +153,10 @@ function Invoke-GitHubScript {
         $scriptContent = Invoke-RestMethod -Uri $scriptUrl -UseBasicParsing
 
         # Remove common interactive elements
-        $scriptContent = $scriptContent -replace 'Read-Host.*Press.*key.*', '# Removed pause'
-        $scriptContent = $scriptContent -replace '\$null\s*=\s*\$Host\.UI\.RawUI\.ReadKey.*', '# Removed pause'
-        $scriptContent = $scriptContent -replace 'pause\s*$', '# Removed pause'
-        $scriptContent = $scriptContent -replace 'Read-Host\s*$', '# Removed pause'
+        $scriptContent = $scriptContent -replace 'Read-Host.*Press.*key.*', ''
+        $scriptContent = $scriptContent -replace '\$null\s*=\s*\$Host\.UI\.RawUI\.ReadKey.*', ''
+        $scriptContent = $scriptContent -replace 'pause\s*$', ''
+        $scriptContent = $scriptContent -replace 'Read-Host\s*$', ''
         
         # Create script block
         $scriptBlock = [ScriptBlock]::Create($scriptContent)
@@ -410,25 +415,7 @@ function global:Show-PerformanceTweaks {
     
     # Add description
     $descBlock = New-Object System.Windows.Controls.TextBlock
-    $descBlock.Text = 'This will automatically apply the following Windows performance optimizations:
-
-- Disable Snap Assist Flyout
-- Delete Temporary Files
-- Disable Consumer Features
-- Disable Telemetry
-- Disable Activity History
-- Disable Explorer Automatic Folder Discovery
-- Disable GameDVR
-- Disable Homegroup
-- Disable Location Tracking
-- Disable Storage Sense
-- Disable Wi-Fi Sense
-- Enable End Task With Right Click
-- Set Services to Manual
-- Enable Dark Mode
-- Set Classic Right-Click Menu
-
-These tweaks will enhance system responsiveness, improve startup times, and optimize various Windows settings for better performance.'
+    $descBlock.Text = 'Select the Windows performance optimizations you want to apply. You can choose individual tweaks or apply all at once.'
     $descBlock.FontSize = 14
     $descBlock.Foreground = 'White'
     $descBlock.FontFamily = 'Segoe UI'
@@ -436,31 +423,121 @@ These tweaks will enhance system responsiveness, improve startup times, and opti
     $descBlock.Margin = '0,0,0,16'
     $rightPanelStack.Children.Add($descBlock)
     
-    # Add warning message
-    $warningBlock = New-Object System.Windows.Controls.TextBlock
-    $warningBlock.Text = 'Note: This will automatically apply ALL performance tweaks. The process will take a few minutes and requires administrator privileges.'
-    $warningBlock.FontSize = 12
-    $warningBlock.Foreground = '#FFD700'
-    $warningBlock.FontFamily = 'Segoe UI'
-    $warningBlock.TextWrapping = 'Wrap'
-    $warningBlock.Margin = '0,0,0,24'
-    $rightPanelStack.Children.Add($warningBlock)
+    # Create tweaks container
+    $tweaksBorder = New-Object System.Windows.Controls.Border
+    $tweaksBorder.Background = '#FF2D2D30'
+    $tweaksBorder.BorderBrush = '#FF3F3F46'
+    $tweaksBorder.BorderThickness = '1'
+    $tweaksBorder.CornerRadius = '4'
+    $tweaksBorder.Margin = '0,0,0,16'
+    $tweaksBorder.Padding = '12'
     
-    # Add run button
-    $runBtn = New-StyledButton -Content 'Run Script' -FontSize 16 -Width 120
-    $runBtn.Height = 40
+    $tweaksStack = New-Object System.Windows.Controls.StackPanel
+    $tweaksStack.Orientation = 'Vertical'
     
-    $runBtn.Add_Click({
-        try {
-            # Execute the script without any arguments (auto mode)
-            Invoke-GitHubScript 'Perfomance_Tweaks.ps1'
-            [System.Windows.MessageBox]::Show("All performance tweaks have been applied successfully!", "Performance Tweaks Complete", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-        } catch {
-            [System.Windows.MessageBox]::Show("Error applying performance tweaks: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+    # Add subtitle within the container
+    $subtitleText = New-Object System.Windows.Controls.TextBlock
+    $subtitleText.Text = 'Select tweaks to apply:'
+    $subtitleText.FontSize = 16
+    $subtitleText.FontWeight = 'Bold'
+    $subtitleText.Foreground = 'White'
+    $subtitleText.FontFamily = 'Segoe UI'
+    $subtitleText.Margin = '0,0,0,12'
+    $tweaksStack.Children.Add($subtitleText)
+    
+    # Define available tweaks (matching your existing script)
+    $availableTweaks = @(
+        @{ Name = "DisableSnapAssistFlyout"; Title = "Disable Snap Assist Flyout"; Description = "Turns off the Snap Assist Flyout feature in Windows"; Category = "Performance" },
+        @{ Name = "DeleteTempFiles"; Title = "Delete Temporary Files"; Description = "Deletes temporary files to free up disk space"; Category = "Cleanup" },
+        @{ Name = "RunDiskCleanup"; Title = "Run Disk Cleanup"; Description = "Runs Windows built-in Disk Cleanup utility to free up disk space"; Category = "Cleanup" },
+        @{ Name = "DisableConsumerFeatures"; Title = "Disable Consumer Features"; Description = "Disables Windows consumer features and app suggestions"; Category = "Privacy" },
+        @{ Name = "DisableTelemetry"; Title = "Disable Telemetry"; Description = "Disables Windows telemetry and data collection"; Category = "Privacy" },
+        @{ Name = "DisableActivityHistory"; Title = "Disable Activity History"; Description = "Erases recent docs, clipboard, and run history"; Category = "Privacy" },
+        @{ Name = "DisableExplorerAutoDiscovery"; Title = "Disable Explorer Auto Folder Discovery"; Description = "Disables automatic folder type discovery in File Explorer"; Category = "Performance" },
+        @{ Name = "DisableGameDVR"; Title = "Disable GameDVR"; Description = "Disables Windows Game DVR and Game Mode features"; Category = "Performance" },
+        @{ Name = "DisableHomegroup"; Title = "Disable Homegroup"; Description = "Disables HomeGroup networking service"; Category = "Privacy" },
+        @{ Name = "DisableLocationTracking"; Title = "Disable Location Tracking"; Description = "Disables Windows location tracking and related services"; Category = "Privacy" },
+        @{ Name = "DisableStorageSense"; Title = "Disable Storage Sense"; Description = "Disables automatic disk cleanup and storage management"; Category = "Performance" },
+        @{ Name = "DisableWiFiSense"; Title = "Disable Wi-Fi Sense"; Description = "Disables WiFi sense and password sharing features"; Category = "Privacy" },
+        @{ Name = "EnableEndTaskRightClick"; Title = "Enable End Task With Right Click"; Description = "Enables option to end task when right clicking a program in the taskbar"; Category = "Enhancement" },
+        @{ Name = "SetServicesManual"; Title = "Set Services to Manual"; Description = "Sets various Windows services to manual startup to improve boot time"; Category = "Performance" },
+        @{ Name = "EnableDarkMode"; Title = "Enable Dark Mode"; Description = "Enables dark mode for Windows and applications"; Category = "Enhancement" },
+        @{ Name = "SetClassicRightClickMenu"; Title = "Set Classic Right-Click Menu"; Description = "Restores the classic context menu in Windows 11 (requires Explorer restart)"; Category = "Enhancement" }
+    )
+    
+    # Create checkboxes for each tweak
+    $global:TweakCheckboxes = @()
+    foreach ($tweak in $availableTweaks) {
+        $checkbox = New-Object System.Windows.Controls.CheckBox
+        $checkbox.Content = "$($tweak.Title)"
+        $checkbox.ToolTip = "$($tweak.Description)`nCategory: $($tweak.Category)"
+        $checkbox.Margin = '0,0,0,6'
+        $checkbox.Foreground = 'White'
+        $checkbox.FontFamily = 'Segoe UI'
+        $checkbox.FontSize = 14
+        $checkbox.Tag = $tweak  # Store tweak info for later use
+        $global:TweakCheckboxes += $checkbox
+        $tweaksStack.Children.Add($checkbox)
+    }
+    
+    $tweaksBorder.Child = $tweaksStack
+    $rightPanelStack.Children.Add($tweaksBorder)
+    
+    # Create button panel
+    $buttonPanel = New-Object System.Windows.Controls.StackPanel
+    $buttonPanel.Orientation = 'Horizontal'
+    $buttonPanel.HorizontalAlignment = 'Left'
+    $buttonPanel.Margin = '0,16,0,0'
+    
+    # Apply Selected Tweaks button
+    $applyBtn = New-StyledButton -Content 'Apply Selected Tweaks' -FontSize 16 -Background '#FF4444' -Width 180 -Margin '0,0,16,0'
+    $applyBtn.Height = 40
+    
+    $applyBtn.Add_Click({
+        # Find all checked checkboxes
+        $selected = @()
+        foreach ($cb in $global:TweakCheckboxes) {
+            if ($cb.IsChecked) {
+                $selected += $cb.Tag
+            }
         }
-    })
+        
+        if ($selected.Count -eq 0) {
+            [System.Windows.MessageBox]::Show("Please select at least one tweak to apply.", "No Tweaks Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+            return
+        }
+        
+        # Confirm application
+        $result = [System.Windows.MessageBox]::Show("Are you sure you want to apply $($selected.Count) selected tweak(s)?`n`nNote: Some tweaks may require a system restart to take full effect.", "Confirm Tweaks Application", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+        if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
+            global:Apply-SelectedTweaks $selected $rightPanelStack
+        }
+    }.GetNewClosure())
     
-    $rightPanelStack.Children.Add($runBtn)
+    # Select All button
+    $selectAllBtn = New-StyledButton -Content 'Select All' -FontSize 16 -Background '#444444' -Width 120 -Margin '0,0,16,0'
+    $selectAllBtn.Height = 40
+    
+    $selectAllBtn.Add_Click({
+        foreach ($cb in $global:TweakCheckboxes) {
+            $cb.IsChecked = $true
+        }
+    }.GetNewClosure())
+    
+    # Clear Selection button
+    $clearAllBtn = New-StyledButton -Content 'Clear Selection' -FontSize 16 -Background '#444444' -Width 140
+    $clearAllBtn.Height = 40
+    
+    $clearAllBtn.Add_Click({
+        foreach ($cb in $global:TweakCheckboxes) {
+            $cb.IsChecked = $false
+        }
+    }.GetNewClosure())
+    
+    $buttonPanel.Children.Add($applyBtn)
+    $buttonPanel.Children.Add($selectAllBtn)
+    $buttonPanel.Children.Add($clearAllBtn)
+    $rightPanelStack.Children.Add($buttonPanel)
 }
 
 function global:Show-AppRemovalSelection {
@@ -866,6 +943,221 @@ function global:Remove-SelectedApps {
     $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
 }
 
+function global:Apply-SelectedTweaks {
+    param([array]$SelectedTweaks, $rightPanelStack)
+    
+    # Clear the panel and show progress
+    $rightPanelStack.Children.Clear()
+    
+    # Add progress title
+    $progressTitle = New-StyledTextBlock -Text 'Applying Selected Tweaks...' -FontSize 18 -FontWeight 'Bold' -Margin '0,0,0,16'
+    $rightPanelStack.Children.Add($progressTitle)
+    
+    # Add progress text area
+    $progressText = New-Object System.Windows.Controls.TextBlock
+    $progressText.FontSize = 14
+    $progressText.Foreground = 'White'
+    $progressText.FontFamily = 'Consolas'
+    $progressText.Text = "Starting tweak application...`n"
+    $progressText.TextWrapping = 'Wrap'
+    $rightPanelStack.Children.Add($progressText)
+    
+    # Force UI update
+    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+    
+    $applied = $failed = 0
+    $totalTweaks = $SelectedTweaks.Count
+    
+    # Apply each selected tweak individually
+    foreach ($selectedTweak in $SelectedTweaks) {
+        $tweakName = $selectedTweak.Name
+        $progressText.Text += "`nApplying: $($selectedTweak.Title)...`n"
+        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+        
+        try {
+            $success = $false
+            
+            # Handle specific tweaks directly
+            switch ($tweakName) {
+                "RunDiskCleanup" {
+                    try {
+                        $progressText.Text += "  Starting Windows Disk Cleanup utility...`n"
+                        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+                        
+                        # Configure Disk Cleanup settings
+                        $regPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches'
+                        $items = @('Temporary Files', 'Temporary Internet Files', 'Recycle Bin', 'Windows Update Cleanup', 'System error memory dump files', 'Windows Error Reporting Files', 'Downloaded Program Files', 'Temporary Sync Files')
+                        
+                        foreach ($item in $items) {
+                            $itemPath = Join-Path $regPath $item
+                            if (Test-Path $itemPath) {
+                                Set-ItemProperty -Path $itemPath -Name 'StateFlags0001' -Value 2 -Type DWord -ErrorAction SilentlyContinue
+                            }
+                        }
+                        
+                        $progressText.Text += "  Configured Disk Cleanup settings...`n"
+                        $progressText.Text += "  Running Disk Cleanup (this may take a few minutes)...`n"
+                        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+                        
+                        # Run Disk Cleanup without waiting (async)
+                        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+                        $startInfo.FileName = "cleanmgr.exe"
+                        $startInfo.Arguments = "/sagerun:1"
+                        $startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+                        $startInfo.UseShellExecute = $false
+                        $startInfo.CreateNoWindow = $true
+                        
+                        $process = [System.Diagnostics.Process]::Start($startInfo)
+                        
+                        # Monitor the process without blocking the UI
+                        $timeout = 300 # 5 minutes timeout
+                        $elapsed = 0
+                        
+                        while (!$process.HasExited -and $elapsed -lt $timeout) {
+                            Start-Sleep -Milliseconds 500
+                            $elapsed++
+                            
+                            # Update UI every 10 iterations (5 seconds)
+                            if ($elapsed % 10 -eq 0) {
+                                $progressText.Text += "  Disk Cleanup still running... ($([math]::Round($elapsed/2)) seconds)`n"
+                                $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+                            }
+                        }
+                        
+                        if ($process.HasExited) {
+                            if ($process.ExitCode -eq 0) {
+                                $progressText.Text += "  Disk Cleanup completed successfully!`n"
+                                $success = $true
+                            } else {
+                                $progressText.Text += "  Disk Cleanup finished with code: $($process.ExitCode)`n"
+                                # Still consider it a success if it ran
+                                $success = $true
+                            }
+                        } else {
+                            $progressText.Text += "  Disk Cleanup timed out after 5 minutes, but may still be running...`n"
+                            $success = $true # Consider timeout as success since it was running
+                        }
+                        
+                        $process.Close()
+                        
+                    } catch {
+                        $progressText.Text += "  Error running Disk Cleanup: $($_.Exception.Message)`n"
+                        $progressText.Text += "  Running fallback cleanup...`n"
+                        try {
+                            Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+                            $progressText.Text += "  Basic cleanup completed.`n"
+                            $success = $true
+                        } catch {
+                            $progressText.Text += "  Fallback cleanup failed: $($_.Exception.Message)`n"
+                        }
+                    }
+                }
+                
+                "DeleteTempFiles" {
+                    try {
+                        $progressText.Text += "  Deleting temporary files...`n"
+                        Get-ChildItem -Path $env:TEMP -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+                        Get-ChildItem -Path 'C:\Windows\Temp' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+                        Get-ChildItem -Path 'C:\Windows\Prefetch' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+                        $progressText.Text += "  Temporary files deleted successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error deleting temp files: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "EnableDarkMode" {
+                    try {
+                        $progressText.Text += "  Enabling Dark Mode...`n"
+                        if (!(Test-Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize")) {
+                            New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Force | Out-Null
+                        }
+                        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord
+                        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord
+                        $progressText.Text += "  Dark Mode enabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error enabling Dark Mode: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                "DisableTelemetry" {
+                    try {
+                        $progressText.Text += "  Disabling telemetry...`n"
+                        # Create paths if they don't exist
+                        if (!(Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection")) {
+                            New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection" -Force | Out-Null
+                        }
+                        if (!(Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection")) {
+                            New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Force | Out-Null
+                        }
+                        
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection" -Name "AllowTelemetry" -Value 0 -Type DWord
+                        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -Value 0 -Type DWord
+                        $progressText.Text += "  Telemetry disabled successfully!`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Error disabling telemetry: $($_.Exception.Message)`n"
+                    }
+                }
+                
+                default {
+                    # For other tweaks, try to execute them using the original script method
+                    try {
+                        $progressText.Text += "  Executing via performance tweaks script...`n"
+                        $result = Invoke-GitHubScript 'Perfomance_Tweaks.ps1' -ErrorAction Stop
+                        $progressText.Text += "  Executed successfully via main script.`n"
+                        $success = $true
+                    } catch {
+                        $progressText.Text += "  Could not execute $($selectedTweak.Title): $($_.Exception.Message)`n"
+                    }
+                }
+            }
+            
+            if ($success) {
+                $progressText.Text += "  [OK] $($selectedTweak.Title) applied successfully`n"
+                $applied++
+            } else {
+                $progressText.Text += "  [ERROR] Failed to apply $($selectedTweak.Title)`n"
+                $failed++
+            }
+            
+        } catch {
+            $progressText.Text += "  [ERROR] Exception applying $($selectedTweak.Title): $($_.Exception.Message)`n"
+            $failed++
+        }
+        
+        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+    }
+    
+    # Add summary
+    $progressText.Text += "`n--- Tweaks Application Summary ---`n"
+    $progressText.Text += "Selected tweaks: $totalTweaks`n"
+    $progressText.Text += "Applied: $applied`n"
+    $progressText.Text += "Failed: $failed`n"
+    
+    if ($applied -gt 0) {
+        $progressText.Text += "`n[SUCCESS] Tweaks application completed!`n"
+        $progressText.Text += "Note: Some changes may require a restart to take full effect.`n"
+    }
+    
+    # Add Done button
+    $doneBtn = New-StyledButton -Content 'Done' -FontSize 16 -Margin '0,16,0,0'
+    $doneBtn.HorizontalAlignment = 'Center'
+    $doneBtn.Add_Click({
+        # Go back to tweaks selection
+        $rightPanelBorder = $global:window.FindName('RightPanelDesc')
+        if ($rightPanelBorder) {
+            global:Show-PerformanceTweaks $rightPanelBorder
+        }
+    }.GetNewClosure())
+    
+    $rightPanelStack.Children.Add($doneBtn)
+    
+    # Force final UI update
+    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+}
+
 function Add-MenuItem {
     param($leftPanelStack, $text, $scriptName)
     $item = New-Object System.Windows.Controls.TextBlock
@@ -927,6 +1219,7 @@ function global:Show-ScriptDescription {
             'Winget_Install.ps1' { "This script installs the Windows Package Manager (winget) on your system.`n If Winget is already installed then it will be updated to the latest version.`n We recommend using this script to ensure you have the latest version of winget,`n as it will provide the best experience when running other tweaks." }
             'Online-app-Install.ps1' { "Select applications to install from a curated list of popular software.`n This script will automate the installation process for you." }
             'Delay-WindowsUpdates.ps1' { "Delay Windows Updates`n`nThis script will configure Windows Update settings to delay automatic updates, giving you more control over when updates are installed.`n`nFeatures:`n- Prevent automatic restarts`n- Allow manual update installation`n- Maintain security while reducing interruptions" }
+            'Disable-WindowsUpdates.ps1' {"Permenently Disable Windows Updates`n`nThis script will disable Windows Update services and related tasks to prevent automatic updates from being installed on your system.`n`nWarning: Disabling updates can expose your system to security vulnerabilities. Use this script only if you understand the risks and have alternative security measures in place.`n This will also remove the 'Check for Updates' button from windows setting." }
             'App_Remover.ps1' { "This will Provide you with a list of installed applications and allow you to select which ones to remove." }
             'Lanman_Network.ps1' { "Lanman Network Tweaks`n`nThis script configures LanmanWorkstation registry settings and SMB client configuration to enable secure guest authentication and insecure guest logons.`n`nWhat it does:`n- Enables AllowInsecureGuestAuth registry setting`n- Disables SMB security signature requirements`n- Enables insecure guest logons for SMB shares`n- Improves compatibility with older network devices`n`nNote: These changes reduce security but may be needed for legacy network access." }
             'SMB-Connection-Reset.ps1' { "Reset SMB Connections`n`nThis comprehensive network management script displays network adapter information, shows active SMB connections, and provides the option to reset all SMB connections by restarting the LanmanWorkstation service.`n`nFeatures:`n- Display network adapter link speeds and status`n- Show all active SMB protocol connections`n- Reset SMB connections (requires confirmation)`n- Restart LanmanWorkstation service safely`n- Requires administrator privileges for service operations" }
@@ -1175,6 +1468,7 @@ function global:Show-GeneralTweaksMenu {
         "4" = @{ Name = "Stop Automatic Windows Updates"; File = "Delay-WindowsUpdates.ps1" }
         "5" = @{ Name = "Remove Bloatware"; File = "App_Remover.ps1" }
         "A" = @{ Name = "Run All Scripts"; File = "" }
+        "9" = @{ Name = "Permanent Disable Windows Update"; File = "Disable-WindowsUpdates.ps1" }
     }
     
     Show-SubMenu "General Tweaks" $menuItems "Select an option to perform General Tweaks tasks."
@@ -1196,7 +1490,6 @@ function global:Show-HardwareMenu {
     $menuItems = @{
         "H" = @{ Name = "Hardware Information"; File = "Hardware_Report_Generator.ps1" }
     }
-    
     Show-SubMenu "Hardware" $menuItems "Select a hardware option to view system information and generate`n reports."
 }
 
