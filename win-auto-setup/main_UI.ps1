@@ -39,110 +39,52 @@ if (-not (Test-IsAdmin)) {
     Write-Host "- Modify system settings and registry" -ForegroundColor White
     Write-Host "- Remove bloatware applications" -ForegroundColor White
     Write-Host ""
-    Write-Host "Starting elevated PowerShell session..." -ForegroundColor Cyan
+    Write-Host "Restarting with elevated privileges..." -ForegroundColor Cyan
     Write-Host "Please accept the UAC prompt to continue." -ForegroundColor Yellow
     Write-Host ""
 
     try {
-        # Determine if running from a saved file or from memory (GitHub/irm)
-        $scriptPath = $MyInvocation.MyCommand.Definition
-        $scriptSource = $MyInvocation.MyCommand.ScriptBlock
+        # Get the current PowerShell command line that started this script
+        $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
         
-        # More comprehensive detection for irm/iex execution
-        $isFromGitHub = [string]::IsNullOrEmpty($scriptPath) -or 
-                       $scriptPath -match "ise.*tmp" -or
-                       $scriptPath -match "ScriptBlock" -or
-                       $scriptPath -eq "" -or
-                       $scriptPath -match "^\s*$" -or
-                       ($null -ne $scriptSource -and [string]::IsNullOrEmpty($scriptPath))
-        
-        if ($isFromGitHub) {
-            # Running from GitHub/irm - create a temporary script approach that works better
-            Write-Host "Detected irm/GitHub execution - preparing for elevation..." -ForegroundColor Yellow
-            
-            # Create a simple PowerShell script that will run the irm command properly
-            $tempScriptPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "SunriseUI_$(Get-Date -Format 'yyyyMMddHHmmss').ps1")
-            
+        # Build the restart command
+        if ($MyInvocation.MyCommand.Path) {
+            # Running from a file
+            $arguments = "-ExecutionPolicy Bypass -NoProfile -File `"$($MyInvocation.MyCommand.Path)`""
             if ($AutoRun) {
-                $scriptContent = @"
-# Sunrise Computers UI Launcher (with AutoRun)
-`$autoRun = '$AutoRun'
-try {
-    Write-Host "Downloading Sunrise Computers UI..." -ForegroundColor Cyan
-    Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1' -UseBasicParsing | Invoke-Expression
-} catch {
-    Write-Host "Error: `$(`$_.Exception.Message)" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-}
-"@
-            } else {
-                $scriptContent = @"
-# Sunrise Computers UI Launcher
-try {
-    Write-Host "Downloading Sunrise Computers UI..." -ForegroundColor Cyan
-    Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1' -UseBasicParsing | Invoke-Expression
-} catch {
-    Write-Host "Error: `$(`$_.Exception.Message)" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-}
-"@
-            }
-            
-            try {
-                # Save the launcher script
-                $scriptContent | Out-File -FilePath $tempScriptPath -Encoding UTF8 -Force
-                Write-Host "Created launcher script: $tempScriptPath" -ForegroundColor Green
-                $scriptToRun = $tempScriptPath
-                
-            } catch {
-                Write-Host "Failed to create launcher script: $($_.Exception.Message)" -ForegroundColor Red
-                Write-Host "Please run PowerShell as Administrator and use:" -ForegroundColor Yellow
-                Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor White
-                Read-Host "Press Enter to exit"
-                exit 1
+                $arguments += " -AutoRun `"$AutoRun`""
             }
         } else {
-            # Running from local file
-            Write-Host "Detected local file execution" -ForegroundColor Green
-            $scriptToRun = $scriptPath
+            # Running from irm/iex - restart with the same irm command
+            $arguments = "-ExecutionPolicy Bypass -NoProfile -Command `"irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex`""
         }
         
-        # Build PowerShell arguments for file execution
-        $arguments = @(
-            "-ExecutionPolicy", "Bypass",
-            "-NoProfile",
-            "-File", "`"$scriptToRun`""
-        )
-        
-        if ($AutoRun) {
-            $arguments += @("-AutoRun", "`"$AutoRun`"")
-        }
-
         # Start elevated PowerShell process
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
         $startInfo.FileName = "powershell.exe"
-        $startInfo.Arguments = $arguments -join ' '
+        $startInfo.Arguments = $arguments
         $startInfo.Verb = "RunAs"
         $startInfo.UseShellExecute = $true
         
-        $process = [System.Diagnostics.Process]::Start($startInfo)
-
-        Write-Host ""
-        Write-Host "Elevated session started successfully!" -ForegroundColor Green
-        Write-Host "The UI will appear in the new Administrator window." -ForegroundColor Cyan
-        Write-Host "This window will close in 3 seconds..." -ForegroundColor Gray
-        Start-Sleep -Seconds 3
+        Write-Host "Starting elevated PowerShell..." -ForegroundColor Green
+        [System.Diagnostics.Process]::Start($startInfo) | Out-Null
+        
+        # Exit current non-admin process
+        Write-Host "Elevated session started. This window will now close." -ForegroundColor Cyan
+        Start-Sleep -Seconds 2
         exit 0
 
     } catch {
         Write-Host ""
-        Write-Host "ERROR: Failed to start elevated session." -ForegroundColor Red
+        Write-Host "ERROR: Failed to restart with elevated privileges." -ForegroundColor Red
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host ""
-        Write-Host "Manual workaround:" -ForegroundColor Yellow
-        Write-Host "1. Right-click PowerShell and 'Run as Administrator'" -ForegroundColor White
-        Write-Host "2. Run this command:" -ForegroundColor White
-        Write-Host "   irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor Cyan
+        Write-Host "Please manually run PowerShell as Administrator and use:" -ForegroundColor Yellow
+        if ($MyInvocation.MyCommand.Path) {
+            Write-Host "& '$($MyInvocation.MyCommand.Path)'" -ForegroundColor White
+        } else {
+            Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor White
+        }
         Write-Host ""
         Read-Host "Press Enter to exit"
         exit 1
