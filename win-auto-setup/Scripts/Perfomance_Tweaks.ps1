@@ -26,6 +26,39 @@ $tweaksConfig = @'
       "Get-ChildItem -Path 'C:\\Windows\\Prefetch' -Recurse | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue"
     ]
   },
+  "RunDiskCleanup": {
+    "Content": "Run Disk Cleanup",
+    "Description": "Runs Windows built-in Disk Cleanup utility to free up disk space.",
+    "category": "Cleanup",
+    "InvokeScript": [
+      "Write-Host 'Starting Windows Disk Cleanup utility...' -ForegroundColor Yellow",
+      "try {",
+      "  # Configure Disk Cleanup settings in registry for automated run",
+      "  $regPath = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VolumeCaches'",
+      "  $items = @('Temporary Files', 'Temporary Internet Files', 'Recycle Bin', 'Windows Update Cleanup', 'System error memory dump files', 'Windows Error Reporting Files', 'Downloaded Program Files', 'Temporary Sync Files')",
+      "  foreach ($item in $items) {",
+      "    $itemPath = Join-Path $regPath $item",
+      "    if (Test-Path $itemPath) {",
+      "      Set-ItemProperty -Path $itemPath -Name 'StateFlags0001' -Value 2 -Type DWord -ErrorAction SilentlyContinue",
+      "    }",
+      "  }",
+      "  Write-Host 'Configured Disk Cleanup settings...' -ForegroundColor Cyan",
+      "  # Run Disk Cleanup with configured settings",
+      "  $process = Start-Process 'cleanmgr.exe' -ArgumentList '/sagerun:1' -Wait -PassThru -WindowStyle Hidden",
+      "  if ($process.ExitCode -eq 0) {",
+      "    Write-Host 'Disk Cleanup completed successfully!' -ForegroundColor Green",
+      "  } else {",
+      "    Write-Host 'Disk Cleanup finished with code: ' + $process.ExitCode -ForegroundColor Yellow",
+      "  }",
+      "} catch {",
+      "  Write-Host 'Error running Disk Cleanup: ' + $_.Exception.Message -ForegroundColor Red",
+      "  # Fallback: Run basic cleanup manually",
+      "  Write-Host 'Running fallback cleanup...' -ForegroundColor Yellow",
+      "  Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue",
+      "  Write-Host 'Basic cleanup completed.' -ForegroundColor Green",
+      "}"
+    ]
+  },
   "DisableConsumerFeatures": {
     "Content": "Disable ConsumerFeatures",
     "Description": "Disables Windows consumer features and app suggestions.",
