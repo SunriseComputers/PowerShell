@@ -29,9 +29,9 @@ function Test-IsAdmin {
 
 # Check if running as administrator
 if (-not (Test-IsAdmin)) {
-    Write-Host "="-ForegroundColor Red
+    Write-Host "=" * 50 -ForegroundColor Red
     Write-Host "ADMINISTRATOR PRIVILEGES REQUIRED" -ForegroundColor Red
-    Write-Host "="-ForegroundColor Red
+    Write-Host "=" * 50 -ForegroundColor Red
     Write-Host ""
     Write-Host "This script requires Administrator privileges to:" -ForegroundColor Yellow
     Write-Host "- Set execution policy to Unrestricted" -ForegroundColor White
@@ -44,42 +44,83 @@ if (-not (Test-IsAdmin)) {
     Write-Host ""
 
     try {
-        # Check if running from GitHub (temp file) vs local file
-        # When run via irm|iex, MyCommand.Definition will be empty or contain script block info
-        $isFromGitHub = [string]::IsNullOrEmpty($MyInvocation.MyCommand.Definition) -or 
-                       $MyInvocation.MyCommand.Definition -match "Temp|AppData.*Temp|ScriptBlock"
+        # Determine if running from a saved file or from memory (GitHub/irm)
+        $scriptPath = $MyInvocation.MyCommand.Definition
+        $scriptSource = $MyInvocation.MyCommand.ScriptBlock
+        
+        # More comprehensive detection for irm/iex execution
+        $isFromGitHub = [string]::IsNullOrEmpty($scriptPath) -or 
+                       $scriptPath -match "ise.*tmp" -or
+                       $scriptPath -match "ScriptBlock" -or
+                       $scriptPath -eq "" -or
+                       $scriptPath -match "^\s*$" -or
+                       ($null -ne $scriptSource -and [string]::IsNullOrEmpty($scriptPath))
         
         if ($isFromGitHub) {
-            # Running from GitHub - download and save to temp file, then execute it
-            $tempScriptPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "SunriseComputers_UI_$(Get-Date -Format 'yyyyMMddHHmmss').ps1")
+            # Running from GitHub/irm - need to download and save the script
+            Write-Host "Detected irm/GitHub execution - preparing for elevation..." -ForegroundColor Yellow
             
-            # Download the script content
-            $scriptContent = Invoke-RestMethod -Uri "https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1" -UseBasicParsing
+            # Create a simple elevation script that downloads and runs the main script
+            $tempScriptPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "SunriseComputers_Elevator_$(Get-Date -Format 'yyyyMMddHHmmss').ps1")
             
-            # Save to temp file
-            $scriptContent | Out-File -FilePath $tempScriptPath -Encoding UTF8 -Force
+            # Create an elevator script that will download and run the main UI script
+            $elevatorScript = @"
+# Elevator script for Sunrise Computers UI
+Write-Host "Downloading and starting Sunrise Computers UI..." -ForegroundColor Cyan
+
+try {
+    # Download and execute the main script
+    Invoke-RestMethod -Uri "https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1" -UseBasicParsing | Invoke-Expression
+} catch {
+    Write-Host "Error downloading script: `$(`$_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Press any key to exit..." -ForegroundColor Gray
+    `$null = `$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}
+"@
             
-            # Build arguments to run the temp file
-            if ($AutoRun) {
-                $arguments = "-ExecutionPolicy Bypass -NoExit -File `"$tempScriptPath`" -AutoRun `"$AutoRun`""
-            } else {
-                $arguments = "-ExecutionPolicy Bypass -NoExit -File `"$tempScriptPath`""
+            try {
+                # Save the elevator script
+                $elevatorScript | Out-File -FilePath $tempScriptPath -Encoding UTF8 -Force
+                Write-Host "Elevator script created: $tempScriptPath" -ForegroundColor Green
+                $scriptToRun = $tempScriptPath
+                
+            } catch {
+                Write-Host "Failed to create elevator script: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "Please run PowerShell as Administrator and use:" -ForegroundColor Yellow
+                Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor White
+                Read-Host "Press Enter to exit"
+                exit 1
             }
         } else {
             # Running from local file
-            $scriptPath = $MyInvocation.MyCommand.Definition
-            if ($AutoRun) {
-                $arguments = "-ExecutionPolicy Bypass -NoExit -File `"$scriptPath`" -AutoRun `"$AutoRun`""
-            } else {
-                $arguments = "-ExecutionPolicy Bypass -NoExit -File `"$scriptPath`""
-            }
+            Write-Host "Detected local file execution" -ForegroundColor Green
+            $scriptToRun = $scriptPath
         }
 
-        # Start elevated PowerShell process (window visible for debugging)
-        $process = Start-Process powershell -ArgumentList $arguments -Verb RunAs -PassThru
+        # Build PowerShell arguments
+        $arguments = @(
+            "-ExecutionPolicy", "Bypass",
+            "-NoProfile",
+            "-File", "`"$scriptToRun`""
+        )
+        
+        if ($AutoRun) {
+            $arguments += @("-AutoRun", "`"$AutoRun`"")
+        }
 
-        Write-Host "Elevated session started. This window will close." -ForegroundColor Green
+        # Start elevated PowerShell process
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = "powershell.exe"
+        $startInfo.Arguments = $arguments -join ' '
+        $startInfo.Verb = "RunAs"
+        $startInfo.UseShellExecute = $true
+        
+        $process = [System.Diagnostics.Process]::Start($startInfo)
+
+        Write-Host ""
+        Write-Host "Elevated session started successfully!" -ForegroundColor Green
         Write-Host "The UI will appear in the new Administrator window." -ForegroundColor Cyan
+        Write-Host "This window will close in 3 seconds..." -ForegroundColor Gray
         Start-Sleep -Seconds 3
         exit 0
 
@@ -88,11 +129,12 @@ if (-not (Test-IsAdmin)) {
         Write-Host "ERROR: Failed to start elevated session." -ForegroundColor Red
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host ""
-        Write-Host "Please manually run PowerShell as Administrator and use:" -ForegroundColor Yellow
-        Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor White
+        Write-Host "Manual workaround:" -ForegroundColor Yellow
+        Write-Host "1. Right-click PowerShell and 'Run as Administrator'" -ForegroundColor White
+        Write-Host "2. Run this command:" -ForegroundColor White
+        Write-Host "   irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "Press any key to exit..." -ForegroundColor Gray
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        Read-Host "Press Enter to exit"
         exit 1
     }
 }# Set execution policy to Unrestricted
@@ -254,6 +296,56 @@ function New-StyledTextBlock {
     return $textBlock
 }
 
+# Helper function for creating titles
+function New-TitleBlock {
+    param([string]$Text, [int]$FontSize = 20)
+    return New-StyledTextBlock -Text $Text -FontSize $FontSize -FontWeight 'Bold' -Foreground '#FF6F00' -Margin '0,0,0,16'
+}
+
+# Helper function for creating descriptions
+function New-DescriptionBlock {
+    param([string]$Text, [int]$FontSize = 14)
+    $block = New-StyledTextBlock -Text $Text -FontSize $FontSize -Foreground 'White' -Margin '0,0,0,16'
+    $block.TextWrapping = 'Wrap'
+    return $block
+}
+
+# Helper function for creating warning blocks
+function New-WarningBlock {
+    param([string]$Text, [int]$FontSize = 13)
+    $block = New-StyledTextBlock -Text $Text -FontSize $FontSize -Foreground '#FFEB3B' -FontWeight 'Bold' -Margin '0,0,0,16'
+    $block.TextWrapping = 'Wrap'
+    return $block
+}
+
+# Helper function for creating containers
+function New-StyledContainer {
+    param([string]$Background = '#FF2D2D30', [string]$BorderBrush = '#FF3F3F46', [string]$Margin = '0,0,0,16')
+    
+    $border = New-Object System.Windows.Controls.Border
+    $border.Background = $Background
+    $border.BorderBrush = $BorderBrush
+    $border.BorderThickness = '1'
+    $border.CornerRadius = '4'
+    $border.Margin = $Margin
+    $border.Padding = '12'
+    
+    return $border
+}
+
+# Helper function for creating menu items
+function Add-MenuCategory {
+    param($leftPanelStack, [string]$Title, [hashtable]$MenuItems = @{})
+    
+    $titleBlock = New-StyledTextBlock -Text $Title -FontSize 24 -FontWeight 'Bold' -Margin '0,0,0,24'
+    $leftPanelStack.Children.Add($titleBlock) | Out-Null
+    
+    foreach ($key in $MenuItems.Keys | Sort-Object) {
+        $item = $MenuItems[$key]
+        Add-MenuItem $leftPanelStack "$key. $($item.Name)" $item.File
+    }
+}
+
 # XAML for the window
 $xaml = @"
 <Window xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
@@ -405,47 +497,17 @@ function global:Show-PerformanceTweaks {
     
     $rightPanelStack.Children.Clear()
     
-    # Add title
-    $titleBlock = New-Object System.Windows.Controls.TextBlock
-    $titleBlock.Text = 'Performance Tweaks'
-    $titleBlock.FontSize = 20
-    $titleBlock.FontWeight = 'Bold'
-    $titleBlock.Foreground = '#FF6F00'
-    $titleBlock.FontFamily = 'Segoe UI'
-    $titleBlock.Margin = '0,0,0,16'
-    $rightPanelStack.Children.Add($titleBlock)
-    
-    # Add description
-    $descBlock = New-Object System.Windows.Controls.TextBlock
-    $descBlock.Text = 'Select the Windows performance optimizations you want to apply. You can choose individual tweaks or apply all at once.'
-    $descBlock.FontSize = 14
-    $descBlock.Foreground = 'White'
-    $descBlock.FontFamily = 'Segoe UI'
-    $descBlock.TextWrapping = 'Wrap'
-    $descBlock.Margin = '0,0,0,16'
-    $rightPanelStack.Children.Add($descBlock)
+    # Add title and description using helper functions
+    $rightPanelStack.Children.Add((New-TitleBlock 'Performance Tweaks'))
+    $rightPanelStack.Children.Add((New-DescriptionBlock 'Select the Windows performance optimizations you want to apply. You can choose individual tweaks or apply all at once.'))
     
     # Create tweaks container
-    $tweaksBorder = New-Object System.Windows.Controls.Border
-    $tweaksBorder.Background = '#FF2D2D30'
-    $tweaksBorder.BorderBrush = '#FF3F3F46'
-    $tweaksBorder.BorderThickness = '1'
-    $tweaksBorder.CornerRadius = '4'
-    $tweaksBorder.Margin = '0,0,0,16'
-    $tweaksBorder.Padding = '12'
-    
+    $tweaksBorder = New-StyledContainer
     $tweaksStack = New-Object System.Windows.Controls.StackPanel
     $tweaksStack.Orientation = 'Vertical'
     
     # Add subtitle within the container
-    $subtitleText = New-Object System.Windows.Controls.TextBlock
-    $subtitleText.Text = 'Select tweaks to apply:'
-    $subtitleText.FontSize = 16
-    $subtitleText.FontWeight = 'Bold'
-    $subtitleText.Foreground = 'White'
-    $subtitleText.FontFamily = 'Segoe UI'
-    $subtitleText.Margin = '0,0,0,12'
-    $tweaksStack.Children.Add($subtitleText)
+    $tweaksStack.Children.Add((New-StyledTextBlock -Text 'Select tweaks to apply:' -FontSize 16 -FontWeight 'Bold' -Margin '0,0,0,12'))
     
     # Define available tweaks (matching your existing script)
     $availableTweaks = @(
@@ -554,36 +616,10 @@ function global:Show-AppRemovalSelection {
     
     $rightPanelStack.Children.Clear()
     
-    # Add title
-    $titleBlock = New-Object System.Windows.Controls.TextBlock
-    $titleBlock.Text = 'Remove Bloatware Applications'
-    $titleBlock.FontSize = 20
-    $titleBlock.FontWeight = 'Bold'
-    $titleBlock.Foreground = '#FF6F00'
-    $titleBlock.FontFamily = 'Segoe UI'
-    $titleBlock.Margin = '0,0,0,16'
-    $rightPanelStack.Children.Add($titleBlock)
-    
-    # Add description
-    $descBlock = New-Object System.Windows.Controls.TextBlock
-    $descBlock.Text = 'Select the applications you want to remove from your system. This will help free up disk space and improve system performance by removing unnecessary software.'
-    $descBlock.FontSize = 14
-    $descBlock.Foreground = 'White'
-    $descBlock.FontFamily = 'Segoe UI'
-    $descBlock.TextWrapping = 'Wrap'
-    $descBlock.Margin = '0,0,0,12'
-    $rightPanelStack.Children.Add($descBlock)
-    
-    # Add warning
-    $warningBlock = New-Object System.Windows.Controls.TextBlock
-    $warningBlock.Text = '⚠️ WARNING: Only remove apps that you know about. Don''t remove apps that you are not familiar with as they can disrupt some functionalities. If you accidentally remove them, then you can always download them back but you need to find them on your own.'
-    $warningBlock.FontSize = 13
-    $warningBlock.Foreground = '#FFEB3B'
-    $warningBlock.FontFamily = 'Segoe UI'
-    $warningBlock.FontWeight = 'Bold'
-    $warningBlock.TextWrapping = 'Wrap'
-    $warningBlock.Margin = '0,0,0,16'
-    $rightPanelStack.Children.Add($warningBlock)
+    # Add title, description, and warning using helper functions
+    $rightPanelStack.Children.Add((New-TitleBlock 'Remove Bloatware Applications'))
+    $rightPanelStack.Children.Add((New-DescriptionBlock 'Select the applications you want to remove from your system. This will help free up disk space and improve system performance by removing unnecessary software.' -Margin '0,0,0,12'))
+    $rightPanelStack.Children.Add((New-WarningBlock '⚠️ WARNING: Only remove apps that you know about. Don''t remove apps that you are not familiar with as they can disrupt some functionalities. If you accidentally remove them, then you can always download them back but you need to find them on your own.'))
     
     # Add loading message
     $loadingText = New-StyledTextBlock -Text 'Loading installed applications...' -FontSize 16
@@ -998,53 +1034,29 @@ function global:Apply-SelectedTweaks {
                         }
                         
                         $progressText.Text += "  Configured Disk Cleanup settings...`n"
-                        $progressText.Text += "  Running Disk Cleanup (this may take a few minutes)...`n"
+                        $progressText.Text += "  Starting Disk Cleanup in background...`n"
                         $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
                         
-                        # Run Disk Cleanup without waiting (async)
-                        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-                        $startInfo.FileName = "cleanmgr.exe"
-                        $startInfo.Arguments = "/sagerun:1"
-                        $startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
-                        $startInfo.UseShellExecute = $false
-                        $startInfo.CreateNoWindow = $true
-                        
-                        $process = [System.Diagnostics.Process]::Start($startInfo)
-                        
-                        # Monitor the process without blocking the UI
-                        $timeout = 300 # 5 minutes timeout
-                        $elapsed = 0
-                        
-                        while (!$process.HasExited -and $elapsed -lt $timeout) {
-                            Start-Sleep -Milliseconds 500
-                            $elapsed++
+                        # Run Disk Cleanup asynchronously without waiting
+                        try {
+                            Start-Process "cleanmgr.exe" -ArgumentList "/sagerun:1" -WindowStyle Hidden -ErrorAction Stop
+                            $progressText.Text += "  Disk Cleanup started successfully in background!`n"
+                            $progressText.Text += "  Note: Disk Cleanup will continue running and clean files automatically.`n"
+                            $success = $true
+                        } catch {
+                            $progressText.Text += "  Could not start Disk Cleanup: $($_.Exception.Message)`n"
+                            $progressText.Text += "  Running alternative cleanup...`n"
                             
-                            # Update UI every 10 iterations (5 seconds)
-                            if ($elapsed % 10 -eq 0) {
-                                $progressText.Text += "  Disk Cleanup still running... ($([math]::Round($elapsed/2)) seconds)`n"
-                                $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
-                            }
+                            # Fallback to manual temp file cleanup
+                            Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+                            Get-ChildItem -Path 'C:\Windows\Temp' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+                            $progressText.Text += "  Manual temp file cleanup completed!`n"
+                            $success = $true
                         }
-                        
-                        if ($process.HasExited) {
-                            if ($process.ExitCode -eq 0) {
-                                $progressText.Text += "  Disk Cleanup completed successfully!`n"
-                                $success = $true
-                            } else {
-                                $progressText.Text += "  Disk Cleanup finished with code: $($process.ExitCode)`n"
-                                # Still consider it a success if it ran
-                                $success = $true
-                            }
-                        } else {
-                            $progressText.Text += "  Disk Cleanup timed out after 5 minutes, but may still be running...`n"
-                            $success = $true # Consider timeout as success since it was running
-                        }
-                        
-                        $process.Close()
                         
                     } catch {
-                        $progressText.Text += "  Error running Disk Cleanup: $($_.Exception.Message)`n"
-                        $progressText.Text += "  Running fallback cleanup...`n"
+                        $progressText.Text += "  Error with cleanup process: $($_.Exception.Message)`n"
+                        $progressText.Text += "  Running basic fallback cleanup...`n"
                         try {
                             Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
                             $progressText.Text += "  Basic cleanup completed.`n"
@@ -1374,33 +1386,11 @@ function global:Show-WelcomePanel {
             $rightPanelStack = $scrollViewer.Content
             $rightPanelStack.Children.Clear()
             
-            # Add welcome content
-            $welcomeTitle = New-Object System.Windows.Controls.TextBlock
-            $welcomeTitle.Text = 'Welcome'
-            $welcomeTitle.FontSize = 56
-            $welcomeTitle.FontWeight = 'Bold'
-            $welcomeTitle.Foreground = 'White'
-            $welcomeTitle.Margin = '0,0,0,2'
-            $welcomeTitle.FontFamily = 'Segoe UI'
-            $welcomeTitle.TextAlignment = 'Center'
-            $rightPanelStack.Children.Add($welcomeTitle) | Out-Null
-            
-            $companyTitle = New-Object System.Windows.Controls.TextBlock
-            $companyTitle.Text = 'Sunrise Computers'
-            $companyTitle.FontSize = 28
-            $companyTitle.Foreground = '#FF6F00'
-            $companyTitle.FontWeight = 'Bold'
-            $companyTitle.Margin = '0,0,0,0'
-            $companyTitle.FontFamily = 'Segoe UI'
-            $companyTitle.TextAlignment = 'Center'
-            $rightPanelStack.Children.Add($companyTitle) | Out-Null
-            
-            $instructionTitle = New-Object System.Windows.Controls.TextBlock
-            $instructionTitle.Text = 'Select a Category from the list on the left to get started.'
-            $instructionTitle.FontSize = 22
-            $instructionTitle.Foreground = 'White'
-            $instructionTitle.FontFamily = 'Segoe UI'
-            $rightPanelStack.Children.Add($instructionTitle) | Out-Null
+            # Add welcome content using helper functions
+            $rightPanelStack.Children.Add((New-StyledTextBlock -Text 'Welcome' -FontSize 56 -FontWeight 'Bold' -TextAlignment 'Center' -Margin '0,0,0,2'))
+            $rightPanelStack.Children.Add((New-StyledTextBlock -Text 'Sunrise Computers' -FontSize 28 -Foreground '#FF6F00' -FontWeight 'Bold' -TextAlignment 'Center' -Margin '0,0,0,0'))
+            $rightPanelStack.Children.Add((New-StyledTextBlock -Text 'Since 2001' -FontSize 22 -Foreground '#FF6F00' -TextAlignment 'Center' -Margin '0,0,0,32'))
+            $rightPanelStack.Children.Add((New-StyledTextBlock -Text 'Select a Category from the list on the left to get started.' -FontSize 22))
         }
     }
 }
@@ -1506,36 +1496,10 @@ function global:Show-MassGraveMenu {
             $rightPanelStack = $scrollViewer.Content
             $rightPanelStack.Children.Clear()
             
-            # Add title
-            $titleBlock = New-Object System.Windows.Controls.TextBlock
-            $titleBlock.Text = 'Microsoft Activation Scripts (MAS)'
-            $titleBlock.FontSize = 20
-            $titleBlock.FontWeight = 'Bold'
-            $titleBlock.Foreground = '#FF6F00'
-            $titleBlock.FontFamily = 'Segoe UI'
-            $titleBlock.Margin = '0,0,0,16'
-            $rightPanelStack.Children.Add($titleBlock)
-            
-            # Add description
-            $descBlock = New-Object System.Windows.Controls.TextBlock
-            $descBlock.Text = "Microsoft Activation Scripts (MAS) is a collection of scripts for activating Microsoft products using HWID / Ohook / KMS38 / Online KMS activation methods, with a focus on open-source code and fewer antivirus detections.`n`nFeatures:`n HWID (Digital License) - Permanent activation for Windows 10 & 11`n Ohook - Permanent activation for Office`n KMS38 - Activation valid until 2038 for Windows 10/11 & Server`n Online KMS - 180 days renewable activation for supported products`n Troubleshoot - Fix activation and licensing issues`n Change Windows Edition - Change/upgrade Windows edition`n Extract $OEM$ Folder - Extract HWID files for pre-activation`n`nThis tool is completely safe and open-source. No files are stored on your system permanently."
-            $descBlock.FontSize = 14
-            $descBlock.Foreground = 'White'
-            $descBlock.FontFamily = 'Segoe UI'
-            $descBlock.TextWrapping = 'Wrap'
-            $descBlock.Margin = '0,0,0,16'
-            $rightPanelStack.Children.Add($descBlock)
-            
-            # Add warning
-            $warningBlock = New-Object System.Windows.Controls.TextBlock
-            $warningBlock.Text = "IMPORTANT: This script downloads and runs Microsoft Activation Scripts from the official MassGrave GitHub repository. Use at your own discretion and ensure compliance with Microsoft's terms of service."
-            $warningBlock.FontSize = 13
-            $warningBlock.Foreground = '#FFEB3B'
-            $warningBlock.FontFamily = 'Segoe UI'
-            $warningBlock.FontWeight = 'Bold'
-            $warningBlock.TextWrapping = 'Wrap'
-            $warningBlock.Margin = '0,0,0,20'
-            $rightPanelStack.Children.Add($warningBlock)
+            # Add title, description, and warning using helper functions
+            $rightPanelStack.Children.Add((New-TitleBlock 'Microsoft Activation Scripts (MAS)'))
+            $rightPanelStack.Children.Add((New-DescriptionBlock "Microsoft Activation Scripts (MAS) is a collection of scripts for activating Microsoft products using HWID / Ohook / KMS38 / Online KMS activation methods, with a focus on open-source code and fewer antivirus detections.`n`nFeatures:`n• HWID (Digital License) - Permanent activation for Windows 10 & 11`n• Ohook - Permanent activation for Office`n• KMS38 - Activation valid until 2038 for Windows 10/11 & Server`n• Online KMS - 180 days renewable activation for supported products`n• Troubleshoot - Fix activation and licensing issues`n• Change Windows Edition - Change/upgrade Windows edition`n• Extract `$OEM`$ Folder - Extract HWID files for pre-activation`n`nThis tool is completely safe and open-source. No files are stored on your system permanently."))
+            $rightPanelStack.Children.Add((New-WarningBlock "⚠️ IMPORTANT: This script downloads and runs Microsoft Activation Scripts from the official MassGrave GitHub repository. Use at your own discretion and ensure compliance with Microsoft's terms of service." -Margin '0,0,0,20'))
 
             # Add Run Mass Grave Scripts button
             $runBtn = New-StyledButton -Content 'Run Scripts' -FontSize 16 -Width 280 -Background '#FF4444'
@@ -1545,8 +1509,8 @@ function global:Show-MassGraveMenu {
                 try {
                     # Show confirmation dialog
                     $result = [System.Windows.MessageBox]::Show(
-                        "This will run the Microsoft Activation Scripts (MAS) from the official repository.`n`nAre you sure you want to continue?",
-                        "Run Microsoft Activation Scripts",
+                        "This will run the Microsoft Activation Scripts (MAS) from the official repository.`n`nAre you sure you want to continue?", 
+                        "Run Microsoft Activation Scripts", 
                         [System.Windows.MessageBoxButton]::YesNo, 
                         [System.Windows.MessageBoxImage]::Question
                     )
