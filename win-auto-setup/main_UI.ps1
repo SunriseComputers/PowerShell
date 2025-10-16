@@ -1573,9 +1573,9 @@ function global:Show-MassGraveMenu {
             $infoBtn.HorizontalAlignment = 'Center'
             $infoBtn.Add_Click({
                 try {
-                    Start-Process "https://github.com/massgravel/Microsoft-Activation-Scripts"
+                    Start-Process "https://massgrave.dev/"
                 } catch {
-                    [System.Windows.MessageBox]::Show("Could not open browser. Visit: https://github.com/massgravel/Microsoft-Activation-Scripts", "Information", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+                    [System.Windows.MessageBox]::Show("Could not open browser. Visit: https://massgrave.dev/", "Information", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
                 }
             })
             $rightPanelStack.Children.Add($infoBtn)
