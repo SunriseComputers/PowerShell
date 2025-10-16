@@ -57,50 +57,65 @@ if (-not (Test-IsAdmin)) {
                        ($null -ne $scriptSource -and [string]::IsNullOrEmpty($scriptPath))
         
         if ($isFromGitHub) {
-            # Running from GitHub/irm - use simpler approach
+            # Running from GitHub/irm - create a temporary script approach that works better
             Write-Host "Detected irm/GitHub execution - preparing for elevation..." -ForegroundColor Yellow
             
-            # For irm execution, use direct PowerShell command instead of saved script
-            # This avoids file system issues and double downloads
-            Write-Host "Creating direct elevation command..." -ForegroundColor Green
-            
-            # Build the elevation command that will run the irm directly
-            $irmCommand = "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex"
-            
-            # Build PowerShell arguments for direct command execution
-            $arguments = @(
-                "-ExecutionPolicy", "Bypass",
-                "-NoProfile",
-                "-Command", "`"$irmCommand`""
-            )
+            # Create a simple PowerShell script that will run the irm command properly
+            $tempScriptPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "SunriseUI_$(Get-Date -Format 'yyyyMMddHHmmss').ps1")
             
             if ($AutoRun) {
-                # For AutoRun with irm, we need to modify the approach
-                $irmCommandWithAutoRun = "(`$autoRun = '$AutoRun'); irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex"
-                $arguments = @(
-                    "-ExecutionPolicy", "Bypass",
-                    "-NoProfile",
-                    "-Command", "`"$irmCommandWithAutoRun`""
-                )
+                $scriptContent = @"
+# Sunrise Computers UI Launcher (with AutoRun)
+`$autoRun = '$AutoRun'
+try {
+    Write-Host "Downloading Sunrise Computers UI..." -ForegroundColor Cyan
+    Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1' -UseBasicParsing | Invoke-Expression
+} catch {
+    Write-Host "Error: `$(`$_.Exception.Message)" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+}
+"@
+            } else {
+                $scriptContent = @"
+# Sunrise Computers UI Launcher
+try {
+    Write-Host "Downloading Sunrise Computers UI..." -ForegroundColor Cyan
+    Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1' -UseBasicParsing | Invoke-Expression
+} catch {
+    Write-Host "Error: `$(`$_.Exception.Message)" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+}
+"@
             }
             
-            # Skip the file-based elevation completely for irm
-            $scriptToRun = $null
+            try {
+                # Save the launcher script
+                $scriptContent | Out-File -FilePath $tempScriptPath -Encoding UTF8 -Force
+                Write-Host "Created launcher script: $tempScriptPath" -ForegroundColor Green
+                $scriptToRun = $tempScriptPath
+                
+            } catch {
+                Write-Host "Failed to create launcher script: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "Please run PowerShell as Administrator and use:" -ForegroundColor Yellow
+                Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor White
+                Read-Host "Press Enter to exit"
+                exit 1
+            }
         } else {
             # Running from local file
             Write-Host "Detected local file execution" -ForegroundColor Green
             $scriptToRun = $scriptPath
-            
-            # Build PowerShell arguments for file execution
-            $arguments = @(
-                "-ExecutionPolicy", "Bypass",
-                "-NoProfile",
-                "-File", "`"$scriptToRun`""
-            )
-            
-            if ($AutoRun) {
-                $arguments += @("-AutoRun", "`"$AutoRun`"")
-            }
+        }
+        
+        # Build PowerShell arguments for file execution
+        $arguments = @(
+            "-ExecutionPolicy", "Bypass",
+            "-NoProfile",
+            "-File", "`"$scriptToRun`""
+        )
+        
+        if ($AutoRun) {
+            $arguments += @("-AutoRun", "`"$AutoRun`"")
         }
 
         # Start elevated PowerShell process
