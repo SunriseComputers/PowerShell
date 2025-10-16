@@ -303,6 +303,8 @@ $xaml = @"
                     <TextBlock Text='1. General Tweaks' FontSize='18' Foreground='White' Margin='0,0,0,12' FontFamily='Segoe UI'/>
                     <TextBlock Text='2. Network' FontSize='18' Foreground='White' Margin='0,0,0,12' FontFamily='Segoe UI'/>
                     <TextBlock Text='3. Device Info' FontSize='18' Foreground='White' FontFamily='Segoe UI'/>
+                    <TextBlock Text='4. Mass Grave' FontSize='18' Foreground='White' FontFamily='Segoe UI'/>
+
                 </StackPanel>
             </Border>
             <!-- Right Panel: semi-transparent black floating box with scroll functionality -->
@@ -1194,6 +1196,8 @@ function Add-MenuItem {
                 global:Show-NetworkMenu
             } elseif ($text -eq '3. Device Info') {
                 global:Show-HardwareMenu
+            } elseif ($text -eq '4. Mass Grave') {
+                global:Show-MassGraveMenu
             } elseif ($text -eq '2. Install Apps (Online)') {
                 # Directly show app selection instead of script description
                 global:Show-AppSelection
@@ -1355,6 +1359,7 @@ function global:Show-MainMenu {
         Add-MenuItem $leftPanelStack '1. General Tweaks' ''
         Add-MenuItem $leftPanelStack '2. Network' ''
         Add-MenuItem $leftPanelStack '3. Device Info' ''
+        Add-MenuItem $leftPanelStack '4. Mass Grave' ''
     }
     
     # Show welcome message in right panel
@@ -1491,6 +1496,131 @@ function global:Show-HardwareMenu {
         "H" = @{ Name = "Hardware Information"; File = "Hardware_Report_Generator.ps1" }
     }
     Show-SubMenu "Hardware" $menuItems "Select a hardware option to view system information and generate`n reports."
+}
+
+function global:Show-MassGraveMenu {
+    $rightPanelBorder = $global:window.FindName('RightPanelDesc')
+    if ($rightPanelBorder -and $rightPanelBorder.Child) {
+        $scrollViewer = $rightPanelBorder.Child
+        if ($scrollViewer -and $scrollViewer.Content) {
+            $rightPanelStack = $scrollViewer.Content
+            $rightPanelStack.Children.Clear()
+            
+            # Add title
+            $titleBlock = New-Object System.Windows.Controls.TextBlock
+            $titleBlock.Text = 'Microsoft Activation Scripts (MAS)'
+            $titleBlock.FontSize = 20
+            $titleBlock.FontWeight = 'Bold'
+            $titleBlock.Foreground = '#FF6F00'
+            $titleBlock.FontFamily = 'Segoe UI'
+            $titleBlock.Margin = '0,0,0,16'
+            $rightPanelStack.Children.Add($titleBlock)
+            
+            # Add description
+            $descBlock = New-Object System.Windows.Controls.TextBlock
+            $descBlock.Text = "Microsoft Activation Scripts (MAS) is a collection of scripts for activating Microsoft products using HWID / Ohook / KMS38 / Online KMS activation methods, with a focus on open-source code and fewer antivirus detections.`n`nFeatures:`n HWID (Digital License) - Permanent activation for Windows 10 & 11`n Ohook - Permanent activation for Office`n KMS38 - Activation valid until 2038 for Windows 10/11 & Server`n Online KMS - 180 days renewable activation for supported products`n Troubleshoot - Fix activation and licensing issues`n Change Windows Edition - Change/upgrade Windows edition`n Extract $OEM$ Folder - Extract HWID files for pre-activation`n`nThis tool is completely safe and open-source. No files are stored on your system permanently."
+            $descBlock.FontSize = 14
+            $descBlock.Foreground = 'White'
+            $descBlock.FontFamily = 'Segoe UI'
+            $descBlock.TextWrapping = 'Wrap'
+            $descBlock.Margin = '0,0,0,16'
+            $rightPanelStack.Children.Add($descBlock)
+            
+            # Add warning
+            $warningBlock = New-Object System.Windows.Controls.TextBlock
+            $warningBlock.Text = "IMPORTANT: This script downloads and runs Microsoft Activation Scripts from the official MassGrave GitHub repository. Use at your own discretion and ensure compliance with Microsoft's terms of service."
+            $warningBlock.FontSize = 13
+            $warningBlock.Foreground = '#FFEB3B'
+            $warningBlock.FontFamily = 'Segoe UI'
+            $warningBlock.FontWeight = 'Bold'
+            $warningBlock.TextWrapping = 'Wrap'
+            $warningBlock.Margin = '0,0,0,20'
+            $rightPanelStack.Children.Add($warningBlock)
+
+            # Add Run Mass Grave Scripts button
+            $runBtn = New-StyledButton -Content 'Run Scripts' -FontSize 16 -Width 280 -Background '#FF4444'
+            $runBtn.Height = 45
+            $runBtn.HorizontalAlignment = 'Center'
+            $runBtn.Add_Click({
+                try {
+                    # Show confirmation dialog
+                    $result = [System.Windows.MessageBox]::Show(
+                        "This will run the Microsoft Activation Scripts (MAS) from the official repository.`n`nAre you sure you want to continue?",  
+                        [System.Windows.MessageBoxButton]::YesNo, 
+                        [System.Windows.MessageBoxImage]::Question
+                    )
+                    
+                    if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
+                        # Show progress
+                        global:Show-MassGraveProgress
+                        
+                        # Execute the original MassGrave command
+                        try {
+                            Invoke-RestMethod https://get.activated.win | Invoke-Expression
+                        } catch {
+                            [System.Windows.MessageBox]::Show("Error running MAS: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                        }
+                    }
+                } catch {
+                    [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                }
+            })
+            $rightPanelStack.Children.Add($runBtn)
+            
+            # Add more info button
+            $infoBtn = New-StyledButton -Content 'More Information' -FontSize 14 -Width 150 -Background '#444444' -Margin '0,12,0,0'
+            $infoBtn.Height = 35
+            $infoBtn.HorizontalAlignment = 'Center'
+            $infoBtn.Add_Click({
+                try {
+                    Start-Process "https://github.com/massgravel/Microsoft-Activation-Scripts"
+                } catch {
+                    [System.Windows.MessageBox]::Show("Could not open browser. Visit: https://github.com/massgravel/Microsoft-Activation-Scripts", "Information", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+                }
+            })
+            $rightPanelStack.Children.Add($infoBtn)
+        }
+    }
+}
+
+function global:Show-MassGraveProgress {
+    $rightPanelBorder = $global:window.FindName('RightPanelDesc')
+    if ($rightPanelBorder -and $rightPanelBorder.Child) {
+        $scrollViewer = $rightPanelBorder.Child
+        if ($scrollViewer -and $scrollViewer.Content) {
+            $rightPanelStack = $scrollViewer.Content
+            $rightPanelStack.Children.Clear()
+            
+            # Add title
+            $titleBlock = New-Object System.Windows.Controls.TextBlock
+            $titleBlock.Text = 'Running Microsoft Activation Scripts...'
+            $titleBlock.FontSize = 20
+            $titleBlock.FontWeight = 'Bold'
+            $titleBlock.Foreground = '#FF6F00'
+            $titleBlock.FontFamily = 'Segoe UI'
+            $titleBlock.Margin = '0,0,0,16'
+            $rightPanelStack.Children.Add($titleBlock)
+            
+            # Add status
+            $statusBlock = New-Object System.Windows.Controls.TextBlock
+            $statusBlock.Text = 'Downloading and launching MAS from GitHub...'
+            $statusBlock.FontSize = 16
+            $statusBlock.Foreground = '#03DAC6'
+            $statusBlock.FontFamily = 'Segoe UI'
+            $statusBlock.Margin = '0,0,0,12'
+            $rightPanelStack.Children.Add($statusBlock)
+            
+            # Add note
+            $noteBlock = New-Object System.Windows.Controls.TextBlock
+            $noteBlock.Text = 'The MAS interface will open in a separate window. You can close this window and use the MAS tool independently.'
+            $noteBlock.FontSize = 14
+            $noteBlock.Foreground = 'White'
+            $noteBlock.FontFamily = 'Segoe UI'
+            $noteBlock.TextWrapping = 'Wrap'
+            $noteBlock.Margin = '0,0,0,16'
+            $rightPanelStack.Children.Add($noteBlock)
+        }
+    }
 }
 
 function global:Show-LanmanResults {
@@ -2468,6 +2598,9 @@ if ($leftPanelBorder -and $leftPanelBorder.Child) {
                 }
                 '3. Device Info' {
                     global:Show-HardwareMenu
+                }
+                '4. Mass Grave' {
+                    global:Show-MassGraveMenu
                 }
             }
         }.GetNewClosure())  # Create a new closure to capture variables
