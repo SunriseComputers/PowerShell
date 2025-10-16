@@ -1,15 +1,14 @@
 $GITHUB_BASE = "https://raw.githubusercontent.com/SunriseComputers/PowerShell/main/win-auto-setup/Scripts"
 
 # Get the script's directory for local file paths
-$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { "." }
 $LocalScriptsPath = Join-Path $ScriptRoot "Scripts"
 
 $scripts = @{
     "1" = @{ Name = "Install WinGet"; File = "Winget_Install.ps1" }
     "2" = @{ Name = "Install Apps (Online)"; File = "Online-app-Install.ps1" }
-    "3" = @{ Name = "Apply Performance Tweaks"; File = "Perfomance-Tweaks-noUI.ps1" }
+    "3" = @{ Name = "Apply Performance Tweaks"; File = "Performance-Tweaks-noUI.ps1" }
     "4" = @{ Name = "Stop Automatic Windows Updates"; File = "Delay-WindowsUpdates.ps1" }
-    # "5" = @{ Name = "Remove Bloatware"; File = "App_Remover.ps1" }
     "6" = @{ Name = "Lanman Network Tweaks"; File = "Lanman_Network.ps1" }
     "7" = @{ Name = "Reset SMB Connection"; File = "SMB-Connection-Reset.ps1" }
     "8" = @{ Name = "Ethernet Link Speed"; File = "link-speed.ps1" }
@@ -18,231 +17,114 @@ $scripts = @{
     "H" = @{ Name = "Hardware Information"; File = "Hardware_Report_Generator.ps1" }
 }
 
+# Function to find script path (local first, then fallback)
+function Get-ScriptPath {
+    param([string]$ScriptFile)
+    
+    $localPaths = @(
+        (Join-Path $LocalScriptsPath $ScriptFile),
+        ".\Scripts\$ScriptFile",
+        ".\$ScriptFile"
+    )
+    
+    foreach ($path in $localPaths) {
+        if (Test-Path $path) {
+            return $path
+        }
+    }
+    return $null
+}
+
 # Function to check if running locally
 function Test-LocalEnvironment {
     return (Test-Path $LocalScriptsPath)
 }
-
-# Function to show local scripts status
-function Show-LocalScriptsStatus {
-    Write-Host "`nLocal Scripts Status:" -ForegroundColor Cyan
-    Write-Host "Scripts Folder: $LocalScriptsPath" -ForegroundColor Gray
-    
-    if (Test-LocalEnvironment) {
-        Write-Host "[OK] Scripts folder found" -ForegroundColor Green
-        
-        # Check each script
-        foreach ($key in $scripts.Keys) {
-            if ($scripts[$key].File -ne "") {
-                $scriptFile = $scripts[$key].File
-                $localPath = Join-Path $LocalScriptsPath $scriptFile
-                
-                if (Test-Path $localPath) {
-                    Write-Host "  [OK] $scriptFile" -ForegroundColor Green
-                } else {
-                    Write-Host "  [MISSING] $scriptFile (will use GitHub)" -ForegroundColor Yellow
-                }
-            }
-        }
-    } else {
-        Write-Host "[ERROR] Scripts folder not found - will use GitHub for all scripts" -ForegroundColor Yellow
-    }
-    
-    Write-Host "`nPress any key to return to menu..." -ForegroundColor Yellow
-    try {
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    } catch {
-        Read-Host "Press Enter to continue" | Out-Null
-    }
-}
-
 # Function to run script (local first, then GitHub fallback)
 function Invoke-Script {
     param([string]$ScriptFile, [string]$ScriptName)
     
-    # Try multiple local path options
-    $localPaths = @(
-        (Join-Path $LocalScriptsPath $ScriptFile),  # Scripts subfolder
-        (Join-Path $ScriptRoot $ScriptFile),        # Same directory as main.ps1
-        ".\Scripts\$ScriptFile",                    # Relative Scripts folder
-        ".\$ScriptFile"                             # Current directory
-    )
+    $localPath = Get-ScriptPath $ScriptFile
     
-    $foundLocal = $false
-    $localPath = ""
-    
-    # Check for local script existence
-    foreach ($path in $localPaths) {
-        if (Test-Path $path) {
-            $foundLocal = $true
-            $localPath = $path
-            break
-        }
-    }
-    
-    if ($foundLocal) {
+    if ($localPath) {
         Write-Host "`nRunning: $ScriptName (Local)..." -ForegroundColor Green
-        Write-Host "Path: $localPath" -ForegroundColor Gray
         try {
-            # Set location to script directory for relative path resolution
-            $originalLocation = Get-Location
-            Set-Location (Split-Path $localPath -Parent)
-            
             & $localPath
             Write-Host "`n$ScriptName completed successfully!" -ForegroundColor Green
         } catch {
             Write-Host "`nError running local script: $($_.Exception.Message)" -ForegroundColor Red
             Write-Host "Attempting GitHub fallback..." -ForegroundColor Yellow
-            $foundLocal = $false  # Force GitHub fallback
-        } finally {
-            # Restore original location
-            Set-Location $originalLocation
+            $localPath = $null
         }
     }
     
-    # Fallback to GitHub if local not found or failed
-    if (-not $foundLocal) {
-        Write-Host "`nLocal script not found. Downloading from GitHub..." -ForegroundColor Yellow
-        Write-Host "Running: $ScriptName (GitHub)..." -ForegroundColor Green
-        
+    if (-not $localPath) {
+        Write-Host "`nDownloading from GitHub..." -ForegroundColor Yellow
         try {
             $script = Invoke-RestMethod -Uri "$GITHUB_BASE/$ScriptFile"
-            if ($script) {
-                Invoke-Expression $script
-                Write-Host "`n$ScriptName completed successfully!" -ForegroundColor Green
-            } else {
-                throw "Empty script received"
-            }
+            Invoke-Expression $script
+            Write-Host "`n$ScriptName completed successfully!" -ForegroundColor Green
         } catch {
             Write-Host "`nError: Could not download or run $ScriptFile from GitHub" -ForegroundColor Red
             Write-Host $_.Exception.Message -ForegroundColor Yellow
         }
     }
     
-    Write-Host "`nPress any key to return to menu..." -ForegroundColor Yellow
-    try {
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    } catch {
-        Read-Host "Press Enter to continue" | Out-Null
-    }
+    Read-Host "`nPress Enter to continue"
 }
 
-# Function to run all scripts (local first, then GitHub fallback)
+
+# Function to run all scripts
 function Invoke-AllScripts {
     Write-Host "`nRunning all scripts in sequence..." -ForegroundColor Cyan
-    Write-Host "WARNING: This will run all scripts from 1-4 one-by-one" -ForegroundColor Red
+    Write-Host "WARNING: This will run scripts 1-4 one-by-one" -ForegroundColor Red
 
-    # Show environment status
     if (Test-LocalEnvironment) {
-        Write-Host "Local environment detected - will use local scripts when available" -ForegroundColor Green
-        Write-Host "Scripts folder: $LocalScriptsPath" -ForegroundColor Gray
+        Write-Host "Local environment detected" -ForegroundColor Green
     } else {
-        Write-Host "Remote environment - will download scripts from GitHub" -ForegroundColor Yellow
+        Write-Host "Remote environment - downloading from GitHub" -ForegroundColor Yellow
     }
 
-    Write-Host "`n1. WE will Install the Latest Version of Winget, Skip if already installed." -ForegroundColor Blue 
-    Write-Host "2. We will Install Essential Applications, which include the following apps -" -ForegroundColor Blue
-    Write-Host "   - Mozilla Firefox"
-    Write-Host "   - SumatraPDF"
-    Write-Host "   - 7zip"
-    Write-Host "   - VLC Media Player"
-    Write-Host "   - UltraViewer"
-    Write-Host "3. We will Apply  the following Performance Tweaks." -ForegroundColor Blue
-    Write-Host "   - Disable Snap Assist Flyout"
-    Write-Host "   - Delete Temporary Files"
-    Write-Host "   - Disable ConsumerFeatures"
-    Write-Host "   - Disable Telemetry"
-    Write-Host "   - Disable Activity History"
-    Write-Host "   - Disable Explorer Automatic Folder Discovery"
-    Write-Host "   - Disable GameDVR"
-    Write-Host "   - Disable Homegroup"
-    Write-Host "   - Disable Location Tracking"
-    Write-Host "   - Disable Storage Sense"
-    Write-Host "   - Disable Wi-Fi Sense"
-    Write-Host "   - Enable End Task With Right Click"
-    Write-Host "   - Set Services to Manual"
-    Write-Host "   - Enable Dark Mode"
-    Write-Host "   - Set Classic Right-Click Menu"
-    Write-Host "4. Stop Automatic Windows Updates" -ForegroundColor Blue
-    Write-Host "   - a. This Will Change the Windows Update Setting to Manual, which means it will only Update Windows when you click on 'Check Updates' inside the Settings App."
-    Write-Host "   - b. This Delay Your Security Udpates to few day. If you do a manual update it will work normally."
-    # Write-Host "5. This will open a new windows where you can select the Apps that you don't want and remove them." -ForegroundColor Blue
+    Write-Host "`nThis will:" -ForegroundColor Blue
+    Write-Host "1. Install WinGet (if needed)"
+    Write-Host "2. Install essential applications"
+    Write-Host "3. Apply performance tweaks"
+    Write-Host "4. Stop automatic Windows updates"
     
-    $confirm = Read-Host "Continue? (Y/N)"
+    $confirm = Read-Host "`nContinue? (Y/N)"
     
     if ($confirm -eq "Y" -or $confirm -eq "y") {
-        $scriptOrder = @("1", "2", "3", "4") #removed 5- Bloatware Remover
-        
-        foreach ($key in $scriptOrder) {
+        foreach ($key in @("1", "2", "3", "4")) {
             $scriptFile = $scripts[$key].File
             $scriptName = $scripts[$key].Name
             
-            # Try multiple local path options
-            $localPaths = @(
-                (Join-Path $LocalScriptsPath $scriptFile),
-                (Join-Path $ScriptRoot $scriptFile),
-                ".\Scripts\$scriptFile",
-                ".\$scriptFile"
-            )
-            
-            $foundLocal = $false
-            $localPath = ""
-            
-            foreach ($path in $localPaths) {
-                if (Test-Path $path) {
-                    $foundLocal = $true
-                    $localPath = $path
-                    break
-                }
-            }
-            
             Write-Host "`n[$key/4] Running: $scriptName..." -ForegroundColor Yellow
             
-            if ($foundLocal) {
-                Write-Host "Using local script: $localPath" -ForegroundColor Gray
+            $localPath = Get-ScriptPath $scriptFile
+            
+            if ($localPath) {
                 try {
-                    $originalLocation = Get-Location
-                    Set-Location (Split-Path $localPath -Parent)
                     & $localPath
                     Write-Host "$scriptName - Completed (Local)" -ForegroundColor Green
                 } catch {
                     Write-Host "$scriptName - Failed (Local): $($_.Exception.Message)" -ForegroundColor Red
-                    Write-Host "Attempting GitHub fallback..." -ForegroundColor Yellow
-                    $foundLocal = $false
-                } finally {
-                    Set-Location $originalLocation
+                    $localPath = $null
                 }
             }
             
-            # GitHub fallback
-            if (-not $foundLocal) {
-                Write-Host "Downloading from GitHub..." -ForegroundColor Gray
+            if (-not $localPath) {
                 try {
                     $script = Invoke-RestMethod -Uri "$GITHUB_BASE/$scriptFile"
-                    if ($script) {
-                        Invoke-Expression $script
-                        Write-Host "$scriptName - Completed (GitHub)" -ForegroundColor Green
-                    } else {
-                        throw "Empty script received"
-                    }
+                    Invoke-Expression $script
+                    Write-Host "$scriptName - Completed (GitHub)" -ForegroundColor Green
                 } catch {
                     Write-Host "$scriptName - Failed (GitHub): $($_.Exception.Message)" -ForegroundColor Red
                 }
             }
         }
-        
         Write-Host "`nAll scripts completed!" -ForegroundColor Green
-    } else {
-        Write-Host "`nReturning to menu..." -ForegroundColor Yellow
-        return
     }
     
-    Write-Host "`nPress any key to return to menu..." -ForegroundColor Yellow
-    try {
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    } catch {
-        Read-Host "Press Enter to continue" | Out-Null
-    }
+    Read-Host "`nPress Enter to continue"
 }
 
 # Main menu function
@@ -289,15 +171,9 @@ Write-Host "  Since 2001 `n"
     foreach ($key in @("H")) {
         Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
-
-    # Local Scripts Status section
-    Write-Host "" -ForegroundColor DarkGray
-    Write-Host "  Local Environment`n" -ForegroundColor Cyan
-    Write-Host "  [L] Show Local Scripts Status" -ForegroundColor White
-
-    Write-Host "`n  [0] Exit`n"-ForegroundColor Red
-    $choice = Read-Host "  Choose an option"
-    return $choice
+    
+    Write-Host "`n  [0] Exit" -ForegroundColor Gray
+    return Read-Host "`nChoose an option"
 }
 
 # Main loop
@@ -306,8 +182,6 @@ do {
     
     if ($choice -eq "A") {
         Invoke-AllScripts
-    } elseif ($choice -eq "L" -or $choice -eq "l") {
-        Show-LocalScriptsStatus
     } elseif ($scripts.ContainsKey($choice) -and $choice -ne "A") {
         Invoke-Script -ScriptFile $scripts[$choice].File -ScriptName $scripts[$choice].Name
     } elseif ($choice -eq "0") {
@@ -315,7 +189,7 @@ do {
         Write-Host "  Sunrise Computers" -ForegroundColor Magenta
         Write-Host "`n  Exiting..." -ForegroundColor Yellow
         Start-Sleep -Seconds 3
-        Stop-Process -Id $PID -Force
+        exit
     } else {
         Write-Host "`nInvalid option. Please try again." -ForegroundColor Red
         Start-Sleep -Seconds 2
