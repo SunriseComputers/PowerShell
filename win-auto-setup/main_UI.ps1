@@ -2706,7 +2706,7 @@ $logoImage = $global:window.FindName('LogoImage')
 if ($logoImage) {
     try {
         # Try to download logo from GitHub
-        $logoUrl = Get-GitHubFileUrl "Files/S_Logo.png"
+        $logoUrl = Get-GitHubFileUrl "/Files/S_Logo.png"
         
         # Test if the logo exists first
         $response = Invoke-WebRequest -Uri $logoUrl -Method Head -ErrorAction Stop
