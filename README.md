@@ -30,7 +30,7 @@ irm https://sunrisecomputers.github.io/PowerShell/win-auto-setup/main.ps1 | iex
 ```
 
 ### Advanced Usage
-For more advanced features, use the interactive UI:
+For more advanced features, use the interactive UI [RECOMMEND] :
 ```powershell
 irm https://sunrisecomputers.github.io/PowerShell/win-auto-setup/main_UI.ps1 | iex
 ```
