@@ -79,9 +79,6 @@ We welcome contributions! Here's how you can get involved:
     cd PowerShell
     ```
 
-## 📝 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 👥 Authors & Contributors
 - **Maintainers**: [quietcod]
 - **Contributors**: [quietcod]
