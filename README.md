@@ -21,7 +21,6 @@ PowerShell is a collection of PowerShell scripts designed to optimize your Windo
 - PowerShell 5.0 or later
 - Administrator privileges
 
- ```
 ## 🎯 Usage
 
 ### Basic Usage
