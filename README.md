@@ -80,8 +80,8 @@ We welcome contributions! Here's how you can get involved:
     ```
 
 ## 👥 Authors & Contributors
-- **Maintainers**: [quietcod]
-- **Contributors**: [quietcod]
+- **Maintainers**: [![GitHub Profile](https://img.shields.io/badge/GitHub-quietcod-blue?logo=github)](https://github.com/quietcod)
+- **Contributors**: [![GitHub Profile](https://img.shields.io/badge/GitHub-quietcod-blue?logo=github)](https://github.com/quietcod)
 
 ## 🐛 Issues & Support
 - **Report Issues**: Open an issue on the [GitHub Issues page](https://github.com/SunriseComputers/PowerShell/issues).
