@@ -1,4 +1,4 @@
-# Win-Auto-Setup ⚙️
+# PowerShell ⚙️
 
 A PowerShell-based automation suite designed to streamline Windows setup, optimization, and application management. This project provides tools for installing software, removing bloatware, tweaking performance settings, and more, all through a user-friendly interface or command-line options. It aims to simplify the process of configuring a new or existing Windows installation to your specific needs.
 
