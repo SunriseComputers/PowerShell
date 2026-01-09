@@ -1,5 +1,29 @@
 $GITHUB_BASE = "https://raw.githubusercontent.com/SunriseComputers/PowerShell/main/win-auto-setup/Scripts"
 
+# Set execution policy to Unrestricted
+try {
+    # Try CurrentUser scope first (less intrusive)
+    Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser -Force -ErrorAction SilentlyContinue
+}
+catch {
+    try {
+        # Fallback to Process scope if CurrentUser fails
+        Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process -Force -ErrorAction SilentlyContinue
+    }
+    catch {
+        # Silent failure - script will continue
+    }
+}
+
+# Unblock all PowerShell files in the script directory to prevent security warnings
+try {
+    $scriptPath = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
+    Get-ChildItem -Path $scriptPath -Recurse -Include *.ps1 -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
+}
+catch {
+    # Silent failure - not critical if unblocking fails
+}
+
 # Get the script's directory for local file paths
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { "." }
 $LocalScriptsPath = Join-Path $ScriptRoot "Scripts"
@@ -50,7 +74,8 @@ function Invoke-Script {
         try {
             & $localPath
             Write-Host "`n$ScriptName completed successfully!" -ForegroundColor Green
-        } catch {
+        }
+        catch {
             Write-Host "`nError running local script: $($_.Exception.Message)" -ForegroundColor Red
             Write-Host "Attempting GitHub fallback..." -ForegroundColor Yellow
             $localPath = $null
@@ -63,7 +88,8 @@ function Invoke-Script {
             $script = Invoke-RestMethod -Uri "$GITHUB_BASE/$ScriptFile"
             Invoke-Expression $script
             Write-Host "`n$ScriptName completed successfully!" -ForegroundColor Green
-        } catch {
+        }
+        catch {
             Write-Host "`nError: Could not download or run $ScriptFile from GitHub" -ForegroundColor Red
             Write-Host $_.Exception.Message -ForegroundColor Yellow
         }
@@ -80,7 +106,8 @@ function Invoke-AllScripts {
 
     if (Test-LocalEnvironment) {
         Write-Host "Local environment detected" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "Remote environment - downloading from GitHub" -ForegroundColor Yellow
     }
 
@@ -105,7 +132,8 @@ function Invoke-AllScripts {
                 try {
                     & $localPath
                     Write-Host "$scriptName - Completed (Local)" -ForegroundColor Green
-                } catch {
+                }
+                catch {
                     Write-Host "$scriptName - Failed (Local): $($_.Exception.Message)" -ForegroundColor Red
                     $localPath = $null
                 }
@@ -116,7 +144,8 @@ function Invoke-AllScripts {
                     $script = Invoke-RestMethod -Uri "$GITHUB_BASE/$scriptFile"
                     Invoke-Expression $script
                     Write-Host "$scriptName - Completed (GitHub)" -ForegroundColor Green
-                } catch {
+                }
+                catch {
                     Write-Host "$scriptName - Failed (GitHub): $($_.Exception.Message)" -ForegroundColor Red
                 }
             }
@@ -138,20 +167,21 @@ function Show-Menu {
  |_____/ \__,_|_| |_|_|  |_|___/\___|  \_____\___/|_| |_| |_| .__/ \__,_|\__\___|_|  |___/
                                                             | |                           
                                                             |_|                           "-ForegroundColor Red
-Write-Host "  Performance Computing" -ForegroundColor Cyan
-Write-Host "  Since 2001 `n"
+    Write-Host "  Performance Computing" -ForegroundColor Cyan
+    Write-Host "  Since 2001 `n"
 
     # Show environment status
     if (Test-LocalEnvironment) {
         Write-Host "  [LOCAL MODE] - Using scripts from: Scripts\" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "  [REMOTE MODE] - Downloading scripts from GitHub" -ForegroundColor Yellow
     }
     Write-Host ""
     
     # Main options
-    foreach ($key in @("1","2","3","4","A","9"))  # removed 5
-    {
+    foreach ($key in @("1", "2", "3", "4", "A", "9")) {
+        # removed 5
         Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
 
@@ -160,7 +190,7 @@ Write-Host "  Since 2001 `n"
     Write-Host "  Network Related Settings`n" -ForegroundColor Cyan
     Write-Host "  Run At Your Own Risk!" -ForegroundColor Red
     Write-Host "  These tweaks may disrupt network connectivity." -ForegroundColor Red
-    foreach ($key in @("6","7","8")) {
+    foreach ($key in @("6", "7", "8")) {
         Write-Host "  [$key] $($scripts[$key].Name)" -ForegroundColor White
     }
 
@@ -182,15 +212,18 @@ do {
     
     if ($choice -eq "A") {
         Invoke-AllScripts
-    } elseif ($scripts.ContainsKey($choice) -and $choice -ne "A") {
+    }
+    elseif ($scripts.ContainsKey($choice) -and $choice -ne "A") {
         Invoke-Script -ScriptFile $scripts[$choice].File -ScriptName $scripts[$choice].Name
-    } elseif ($choice -eq "0") {
+    }
+    elseif ($choice -eq "0") {
         Write-Host "`n  Thank You For Using Our Services" -ForegroundColor Magenta
         Write-Host "  Sunrise Computers" -ForegroundColor Magenta
         Write-Host "`n  Exiting..." -ForegroundColor Yellow
         Start-Sleep -Seconds 3
         exit
-    } else {
+    }
+    else {
         Write-Host "`nInvalid option. Please try again." -ForegroundColor Red
         Start-Sleep -Seconds 2
     }
