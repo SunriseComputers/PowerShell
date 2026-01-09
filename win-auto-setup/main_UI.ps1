@@ -54,7 +54,8 @@ if (-not (Test-IsAdmin)) {
             if ($AutoRun) {
                 $arguments += " -AutoRun `"$AutoRun`""
             }
-        } else {
+        }
+        else {
             # Running from irm/iex - restart with the same irm command
             $arguments = "-ExecutionPolicy Bypass -NoProfile -Command `"irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex`""
         }
@@ -74,7 +75,8 @@ if (-not (Test-IsAdmin)) {
         Start-Sleep -Seconds 2
         exit 0
 
-    } catch {
+    }
+    catch {
         Write-Host ""
         Write-Host "ERROR: Failed to restart with elevated privileges." -ForegroundColor Red
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
@@ -82,24 +84,37 @@ if (-not (Test-IsAdmin)) {
         Write-Host "Please manually run PowerShell as Administrator and use:" -ForegroundColor Yellow
         if ($MyInvocation.MyCommand.Path) {
             Write-Host "& '$($MyInvocation.MyCommand.Path)'" -ForegroundColor White
-        } else {
+        }
+        else {
             Write-Host "irm https://raw.githubusercontent.com/SunriseComputers/PowerShell/refs/heads/main/win-auto-setup/main_UI.ps1 | iex" -ForegroundColor White
         }
         Write-Host ""
         Read-Host "Press Enter to exit"
         exit 1
     }
-}# Set execution policy to Unrestricted
+}
+# Set execution policy to Unrestricted
 try {
     # Try CurrentUser scope first (less intrusive)
     Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser -Force
-} catch {
+}
+catch {
     try {
         # Fallback to Process scope if CurrentUser fails
         Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process -Force
-    } catch {
+    }
+    catch {
         # Silent failure - script will continue
     }
+}
+
+# Unblock all PowerShell files in the script directory to prevent security warnings
+try {
+    $scriptPath = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
+    Get-ChildItem -Path $scriptPath -Recurse -Include *.ps1 -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
+}
+catch {
+    # Silent failure - not critical if unblocking fails
 }
 
 # Load required assemblies for WPF
@@ -152,18 +167,25 @@ function Invoke-GitHubScript {
         $scriptContent = $scriptContent -replace 'pause\s*$', ''
         $scriptContent = $scriptContent -replace 'Read-Host\s*$', ''
         
+        # Remove Y/N confirmation prompts and auto-accept (since GUI already handles confirmation)
+        # Replace Read-Host prompts that ask for Y/N confirmation with automatic "Y" response
+        $scriptContent = $scriptContent -replace '\$confirm\s*=\s*Read-Host\s+.*', '$confirm = "Y"'
+        
         # Create script block
         $scriptBlock = [ScriptBlock]::Create($scriptContent)
         
         # Execute based on arguments and window preferences
         if ($Arguments.Count -gt 0) {
             return & $scriptBlock @Arguments
-        } elseif ($ShowWindow) {
+        }
+        elseif ($ShowWindow) {
             Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -Command `"$scriptContent`"" -Wait
-        } else {
+        }
+        else {
             return & $scriptBlock
         }
-    } catch {
+    }
+    catch {
         throw
     }
 }
@@ -176,7 +198,8 @@ function Get-GitHubFileContent {
     $fileUrl = Get-GitHubFileUrl $FilePath
     try {
         return Invoke-RestMethod -Uri $fileUrl -UseBasicParsing
-    } catch {
+    }
+    catch {
         throw
     }
 }
@@ -391,10 +414,10 @@ function global:Get-InstalledApps {
         } | ForEach-Object {
             $cleanName = $_.DisplayName -replace '\s+\([^)]*\)$', ''
             $apps[$cleanName] = @{
-                UninstallString = $_.UninstallString
+                UninstallString      = $_.UninstallString
                 QuietUninstallString = $_.QuietUninstallString
-                DisplayName = $_.DisplayName
-                Type = "Registry"
+                DisplayName          = $_.DisplayName
+                Type                 = "Registry"
             }
         }
     }
@@ -415,14 +438,15 @@ function global:Get-UWPApps {
                 $package.Name -replace '^Microsoft\.', '' -replace '\.', ' ' -replace 'App$', '' 
             }
             $apps[$displayName] = @{
-                PackageName = $package.Name
+                PackageName     = $package.Name
                 PackageFullName = $package.PackageFullName
-                DisplayName = $displayName
-                Publisher = $package.Publisher
-                Type = "UWP"
+                DisplayName     = $displayName
+                Publisher       = $package.Publisher
+                Type            = "UWP"
             }
         }
-    } catch { 
+    }
+    catch { 
         Write-Warning "Failed to get UWP apps: $_" 
     }
     return $apps
@@ -510,45 +534,45 @@ function global:Show-PerformanceTweaks {
     $applyBtn.Height = 40
     
     $applyBtn.Add_Click({
-        # Find all checked checkboxes
-        $selected = @()
-        foreach ($cb in $global:TweakCheckboxes) {
-            if ($cb.IsChecked) {
-                $selected += $cb.Tag
+            # Find all checked checkboxes
+            $selected = @()
+            foreach ($cb in $global:TweakCheckboxes) {
+                if ($cb.IsChecked) {
+                    $selected += $cb.Tag
+                }
             }
-        }
         
-        if ($selected.Count -eq 0) {
-            [System.Windows.MessageBox]::Show("Please select at least one tweak to apply.", "No Tweaks Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-            return
-        }
+            if ($selected.Count -eq 0) {
+                [System.Windows.MessageBox]::Show("Please select at least one tweak to apply.", "No Tweaks Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+                return
+            }
         
-        # Confirm application
-        $result = [System.Windows.MessageBox]::Show("Are you sure you want to apply $($selected.Count) selected tweak(s)?`n`nNote: Some tweaks may require a system restart to take full effect.", "Confirm Tweaks Application", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
-        if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
-            global:Apply-SelectedTweaks $selected $rightPanelStack
-        }
-    }.GetNewClosure())
+            # Confirm application
+            $result = [System.Windows.MessageBox]::Show("Are you sure you want to apply $($selected.Count) selected tweak(s)?`n`nNote: Some tweaks may require a system restart to take full effect.", "Confirm Tweaks Application", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+            if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
+                global:Apply-SelectedTweaks $selected $rightPanelStack
+            }
+        }.GetNewClosure())
     
     # Select All button
     $selectAllBtn = New-StyledButton -Content 'Select All' -FontSize 16 -Background '#444444' -Width 120 -Margin '0,0,16,0'
     $selectAllBtn.Height = 40
     
     $selectAllBtn.Add_Click({
-        foreach ($cb in $global:TweakCheckboxes) {
-            $cb.IsChecked = $true
-        }
-    }.GetNewClosure())
+            foreach ($cb in $global:TweakCheckboxes) {
+                $cb.IsChecked = $true
+            }
+        }.GetNewClosure())
     
     # Clear Selection button
     $clearAllBtn = New-StyledButton -Content 'Clear Selection' -FontSize 16 -Background '#444444' -Width 140
     $clearAllBtn.Height = 40
     
     $clearAllBtn.Add_Click({
-        foreach ($cb in $global:TweakCheckboxes) {
-            $cb.IsChecked = $false
-        }
-    }.GetNewClosure())
+            foreach ($cb in $global:TweakCheckboxes) {
+                $cb.IsChecked = $false
+            }
+        }.GetNewClosure())
     
     $buttonPanel.Children.Add($applyBtn)
     $buttonPanel.Children.Add($selectAllBtn)
@@ -578,7 +602,7 @@ function global:Show-AppRemovalSelection {
     $rightPanelStack.Children.Add($loadingText)
     
     # Force UI update
-    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
     
     try {
         # Get all installed apps
@@ -677,81 +701,82 @@ function global:Show-AppRemovalSelection {
         $removeBtn.Height = 40
         
         $removeBtn.Add_Click({
-            # Find all checked checkboxes
-            $selected = @()
-            $rightPanelBorder = $global:window.FindName('RightPanelDesc')
+                # Find all checked checkboxes
+                $selected = @()
+                $rightPanelBorder = $global:window.FindName('RightPanelDesc')
             
-            if ($rightPanelBorder -and $rightPanelBorder.Child -and $rightPanelBorder.Child.Content) {
-                $stackPanel = $rightPanelBorder.Child.Content
-                foreach ($child in $stackPanel.Children) {
-                    if ($child -is [System.Windows.Controls.Border]) {
-                        # Look inside the container for checkboxes
-                        $containerStack = $child.Child
-                        if ($containerStack) {
-                            foreach ($containerChild in $containerStack.Children) {
-                                if ($containerChild -is [System.Windows.Controls.CheckBox] -and $containerChild.IsChecked) {
-                                    $selected += $containerChild
+                if ($rightPanelBorder -and $rightPanelBorder.Child -and $rightPanelBorder.Child.Content) {
+                    $stackPanel = $rightPanelBorder.Child.Content
+                    foreach ($child in $stackPanel.Children) {
+                        if ($child -is [System.Windows.Controls.Border]) {
+                            # Look inside the container for checkboxes
+                            $containerStack = $child.Child
+                            if ($containerStack) {
+                                foreach ($containerChild in $containerStack.Children) {
+                                    if ($containerChild -is [System.Windows.Controls.CheckBox] -and $containerChild.IsChecked) {
+                                        $selected += $containerChild
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
             
-            if ($selected.Count -eq 0) {
-                [System.Windows.MessageBox]::Show("Please select at least one app to remove.", "No Apps Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-                return
-            }
+                if ($selected.Count -eq 0) {
+                    [System.Windows.MessageBox]::Show("Please select at least one app to remove.", "No Apps Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+                    return
+                }
             
-            global:Remove-SelectedApps $selected $rightPanelBorder
+                global:Remove-SelectedApps $selected $rightPanelBorder
             
-            if ($rightPanelBorder -and $rightPanelBorder.Child -and $rightPanelBorder.Child.Content) {
-                $stackPanel = $rightPanelBorder.Child.Content
-                foreach ($child in $stackPanel.Children) {
-                    if ($child -is [System.Windows.Controls.CheckBox] -and $child.IsChecked) {
-                        $selected += $child
+                if ($rightPanelBorder -and $rightPanelBorder.Child -and $rightPanelBorder.Child.Content) {
+                    $stackPanel = $rightPanelBorder.Child.Content
+                    foreach ($child in $stackPanel.Children) {
+                        if ($child -is [System.Windows.Controls.CheckBox] -and $child.IsChecked) {
+                            $selected += $child
+                        }
                     }
                 }
-            }
             
-            if ($selected.Count -eq 0) {
-                [System.Windows.MessageBox]::Show("No applications selected. Please select at least one application to remove.", "No Selection", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-                return
-            }
+                if ($selected.Count -eq 0) {
+                    [System.Windows.MessageBox]::Show("No applications selected. Please select at least one application to remove.", "No Selection", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+                    return
+                }
             
-            # Confirm removal
-            $result = [System.Windows.MessageBox]::Show("Are you sure you want to remove $($selected.Count) selected application(s)?`n`nThis action cannot be undone.", "Confirm Removal", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Warning)
-            if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
-                global:Remove-SelectedApps $selected $rightPanelBorder
-            }
-        }.GetNewClosure())
+                # Confirm removal
+                $result = [System.Windows.MessageBox]::Show("Are you sure you want to remove $($selected.Count) selected application(s)?`n`nThis action cannot be undone.", "Confirm Removal", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Warning)
+                if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
+                    global:Remove-SelectedApps $selected $rightPanelBorder
+                }
+            }.GetNewClosure())
         
         # Select All button
         $selectAllBtn = New-StyledButton -Content 'Select All' -FontSize 16 -Background '#444444' -Width 120 -Margin '0,0,16,0'
         $selectAllBtn.Height = 40
         
         $selectAllBtn.Add_Click({
-            foreach ($cb in $checkboxes) {
-                $cb.IsChecked = $true
-            }
-        }.GetNewClosure())
+                foreach ($cb in $checkboxes) {
+                    $cb.IsChecked = $true
+                }
+            }.GetNewClosure())
         
         # Clear All button
         $clearAllBtn = New-StyledButton -Content 'Clear All' -FontSize 16 -Background '#444444' -Width 120
         $clearAllBtn.Height = 40
         
         $clearAllBtn.Add_Click({
-            foreach ($cb in $checkboxes) {
-                $cb.IsChecked = $false
-            }
-        }.GetNewClosure())
+                foreach ($cb in $checkboxes) {
+                    $cb.IsChecked = $false
+                }
+            }.GetNewClosure())
         
         $buttonPanel.Children.Add($removeBtn)
         $buttonPanel.Children.Add($selectAllBtn)
         $buttonPanel.Children.Add($clearAllBtn)
         $rightPanelStack.Children.Add($buttonPanel)
         
-    } catch {
+    }
+    catch {
         $rightPanelStack.Children.Clear()
         $errorText = New-StyledTextBlock -Text "Error loading applications: $($_.Exception.Message)" -FontSize 16 -Foreground 'Red'
         $rightPanelStack.Children.Add($errorText)
@@ -764,7 +789,8 @@ function global:Remove-SelectedApps {
     # Get the stack panel for progress updates
     if ($rightPanelBorder -and $rightPanelBorder.Child -and $rightPanelBorder.Child.Content) {
         $rightPanelStack = $rightPanelBorder.Child.Content
-    } else {
+    }
+    else {
         return
     }
     
@@ -785,7 +811,7 @@ function global:Remove-SelectedApps {
     $rightPanelStack.Children.Add($progressText)
     
     # Force UI update
-    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
     
     $removed = $failed = 0
     $totalApps = $SelectedCheckboxes.Count
@@ -796,7 +822,7 @@ function global:Remove-SelectedApps {
         
         # Update progress
         $progressText.Text += "Attempting to remove $appName...`n"
-        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
         
         try {
             if ($appInfo.Type -eq "UWP") {
@@ -809,7 +835,8 @@ function global:Remove-SelectedApps {
                     Get-AppxPackage -Name $appPattern | Remove-AppxPackage -ErrorAction Stop
                     $progressText.Text += "  Removed for current user`n"
                     $success = $true
-                } catch {
+                }
+                catch {
                     $progressText.Text += "  Warning: Could not remove for current user`n"
                 }
                 
@@ -818,7 +845,8 @@ function global:Remove-SelectedApps {
                     Get-AppxPackage -Name $appPattern -AllUsers | Remove-AppxPackage -AllUsers -ErrorAction Stop
                     $progressText.Text += "  Removed for all users`n"
                     $success = $true
-                } catch {
+                }
+                catch {
                     $progressText.Text += "  Warning: Could not remove for all users`n"
                 }
                 
@@ -828,19 +856,22 @@ function global:Remove-SelectedApps {
                         Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction Stop
                     }
                     $progressText.Text += "  Removed provisioned package`n"
-                } catch {
+                }
+                catch {
                     # Silent failure for provisioned packages
                 }
                 
                 if ($success) {
                     $progressText.Text += "Successfully removed $appName`n`n"
                     $removed++
-                } else {
+                }
+                else {
                     $progressText.Text += "Failed to remove $appName`n`n"
                     $failed++
                 }
                 
-            } else {
+            }
+            else {
                 # Registry app removal
                 $uninstallCmd = if ($appInfo.QuietUninstallString) { $appInfo.QuietUninstallString } else { $appInfo.UninstallString }
                 $success = $false
@@ -854,15 +885,18 @@ function global:Remove-SelectedApps {
                             $progressText.Text += "Successfully removed $appName`n`n"
                             $removed++
                             $success = $true
-                        } else {
+                        }
+                        else {
                             $progressText.Text += "Failed to remove $appName (Exit code: $($process.ExitCode))`n`n"
                             $failed++
                         }
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "Exception removing $appName`: $($_.Exception.Message)`n`n"
                         $failed++
                     }
-                } elseif ($uninstallCmd -match '^"?([^"]+\.exe)"?\s*(.*)') {
+                }
+                elseif ($uninstallCmd -match '^"?([^"]+\.exe)"?\s*(.*)') {
                     # EXE uninstall
                     $exePath = $matches[1]
                     $arguments = $matches[2].Trim()
@@ -878,31 +912,36 @@ function global:Remove-SelectedApps {
                                 $progressText.Text += "Successfully removed $appName`n`n"
                                 $removed++
                                 $success = $true
-                            } else {
+                            }
+                            else {
                                 $progressText.Text += "Failed to remove $appName (Exit code: $($process.ExitCode))`n`n"
                                 $failed++
                             }
-                        } else {
+                        }
+                        else {
                             $progressText.Text += "Uninstaller not found for $appName`n`n"
                             $failed++
                         }
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "Exception removing $appName`: $($_.Exception.Message)`n`n"
                         $failed++
                     }
-                } else {
+                }
+                else {
                     $progressText.Text += "Unknown uninstall format for $appName`n`n"
                     $failed++
                 }
             }
             
-        } catch {
+        }
+        catch {
             $progressText.Text += "Exception removing $appName`: $($_.Exception.Message)`n`n"
             $failed++
         }
         
         # Force UI update after each app
-        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
     }
     
     # Add summary
@@ -920,17 +959,17 @@ function global:Remove-SelectedApps {
     $doneBtn = New-StyledButton -Content 'Done' -FontSize 16 -Margin '0,16,0,0'
     $doneBtn.HorizontalAlignment = 'Center'
     $doneBtn.Add_Click({
-        # Clear the right panel to go back to main menu
-        $rightPanelBorder = $global:window.FindName('RightPanelDesc')
-        if ($rightPanelBorder -and $rightPanelBorder.Child -and $rightPanelBorder.Child.Content) {
-            $rightPanelBorder.Child.Content.Children.Clear()
-        }
-    }.GetNewClosure())
+            # Clear the right panel to go back to main menu
+            $rightPanelBorder = $global:window.FindName('RightPanelDesc')
+            if ($rightPanelBorder -and $rightPanelBorder.Child -and $rightPanelBorder.Child.Content) {
+                $rightPanelBorder.Child.Content.Children.Clear()
+            }
+        }.GetNewClosure())
     
     $rightPanelStack.Children.Add($doneBtn)
     
     # Force final UI update
-    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
 }
 
 function global:Apply-SelectedTweaks {
@@ -953,7 +992,7 @@ function global:Apply-SelectedTweaks {
     $rightPanelStack.Children.Add($progressText)
     
     # Force UI update
-    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
     
     $applied = $failed = 0
     $totalTweaks = $SelectedTweaks.Count
@@ -962,7 +1001,7 @@ function global:Apply-SelectedTweaks {
     foreach ($selectedTweak in $SelectedTweaks) {
         $tweakName = $selectedTweak.Name
         $progressText.Text += "`nApplying: $($selectedTweak.Title)...`n"
-        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
         
         try {
             $success = $false
@@ -972,7 +1011,7 @@ function global:Apply-SelectedTweaks {
                 "RunDiskCleanup" {
                     try {
                         $progressText.Text += "  Starting Windows Disk Cleanup utility...`n"
-                        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+                        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
                         
                         # Configure Disk Cleanup settings
                         $regPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches'
@@ -987,7 +1026,7 @@ function global:Apply-SelectedTweaks {
                         
                         $progressText.Text += "  Configured Disk Cleanup settings...`n"
                         $progressText.Text += "  Starting Disk Cleanup in background...`n"
-                        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+                        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
                         
                         # Run Disk Cleanup asynchronously without waiting
                         try {
@@ -995,7 +1034,8 @@ function global:Apply-SelectedTweaks {
                             $progressText.Text += "  Disk Cleanup started successfully in background!`n"
                             $progressText.Text += "  Note: Disk Cleanup will continue running and clean files automatically.`n"
                             $success = $true
-                        } catch {
+                        }
+                        catch {
                             $progressText.Text += "  Could not start Disk Cleanup: $($_.Exception.Message)`n"
                             $progressText.Text += "  Running alternative cleanup...`n"
                             
@@ -1005,13 +1045,15 @@ function global:Apply-SelectedTweaks {
                                 $tempFiles | Remove-Item -Force -ErrorAction SilentlyContinue
                                 $progressText.Text += "  Manual temp file cleanup completed!`n"
                                 $success = $true
-                            } catch {
+                            }
+                            catch {
                                 $progressText.Text += "  Manual cleanup failed: $($_.Exception.Message)`n"
                                 $success = $false
                             }
                         }
                         
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error with cleanup process: $($_.Exception.Message)`n"
                         $progressText.Text += "  Running basic fallback cleanup...`n"
                         try {
@@ -1020,7 +1062,8 @@ function global:Apply-SelectedTweaks {
                             $userTempFiles | Remove-Item -Force -ErrorAction SilentlyContinue
                             $progressText.Text += "  Basic cleanup completed.`n"
                             $success = $true
-                        } catch {
+                        }
+                        catch {
                             $progressText.Text += "  Fallback cleanup failed: $($_.Exception.Message)`n"
                             $success = $false
                         }
@@ -1030,7 +1073,7 @@ function global:Apply-SelectedTweaks {
                 "DeleteTempFiles" {
                     try {
                         $progressText.Text += "  Deleting temporary files...`n"
-                        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+                        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
                         
                         # Safer temp file cleanup - avoid recursion issues
                         $tempPaths = @($env:TEMP, 'C:\Windows\Temp', 'C:\Windows\Prefetch')
@@ -1040,7 +1083,7 @@ function global:Apply-SelectedTweaks {
                             if (Test-Path $tempPath) {
                                 try {
                                     $progressText.Text += "  Cleaning: $tempPath...`n"
-                                    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+                                    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
                                     
                                     # Get files only (not directories) and delete safely
                                     $files = Get-ChildItem -Path $tempPath -File -ErrorAction SilentlyContinue | Where-Object { 
@@ -1051,11 +1094,13 @@ function global:Apply-SelectedTweaks {
                                         try {
                                             Remove-Item $file.FullName -Force -ErrorAction SilentlyContinue
                                             $cleanedCount++
-                                        } catch {
+                                        }
+                                        catch {
                                             # Skip files that can't be deleted (in use, etc.)
                                         }
                                     }
-                                } catch {
+                                }
+                                catch {
                                     $progressText.Text += "  Warning: Could not clean $tempPath`: $($_.Exception.Message)`n"
                                 }
                             }
@@ -1063,7 +1108,8 @@ function global:Apply-SelectedTweaks {
                         
                         $progressText.Text += "  Cleaned $cleanedCount temporary files successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error deleting temp files: $($_.Exception.Message)`n"
                         $success = $false
                     }
@@ -1079,7 +1125,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord
                         $progressText.Text += "  Dark Mode enabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error enabling Dark Mode: $($_.Exception.Message)`n"
                     }
                 }
@@ -1099,7 +1146,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -Value 0 -Type DWord
                         $progressText.Text += "  Telemetry disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling telemetry: $($_.Exception.Message)`n"
                     }
                 }
@@ -1113,7 +1161,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "EnableSnapAssistFlyout" -Value 0 -Type DWord
                         $progressText.Text += "  Snap Assist Flyout disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling Snap Assist Flyout: $($_.Exception.Message)`n"
                     }
                 }
@@ -1127,7 +1176,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableWindowsConsumerFeatures" -Value 1 -Type DWord
                         $progressText.Text += "  Consumer features disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling consumer features: $($_.Exception.Message)`n"
                     }
                 }
@@ -1143,7 +1193,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "UploadUserActivities" -Value 0 -Type DWord
                         $progressText.Text += "  Activity history disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling activity history: $($_.Exception.Message)`n"
                     }
                 }
@@ -1160,7 +1211,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" -Name "(Default)" -Value "" -Type String
                         $progressText.Text += "  Classic right-click menu enabled! (Restart Explorer to see changes)`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error setting classic right-click menu: $($_.Exception.Message)`n"
                     }
                 }
@@ -1174,7 +1226,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarDeveloperSettings" -Value 1 -Type DWord
                         $progressText.Text += "  End Task right-click option enabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error enabling End Task right-click: $($_.Exception.Message)`n"
                     }
                 }
@@ -1194,7 +1247,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell" -Name "BagMRU Size" -Value 5000 -Type DWord
                         $progressText.Text += "  Explorer auto discovery disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling Explorer auto discovery: $($_.Exception.Message)`n"
                     }
                 }
@@ -1212,7 +1266,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR" -Name "AppCaptureEnabled" -Value 0 -Type DWord
                         $progressText.Text += "  GameDVR disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling GameDVR: $($_.Exception.Message)`n"
                     }
                 }
@@ -1230,7 +1285,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" -Name "Value" -Value "Deny" -Type String
                         $progressText.Text += "  Location tracking disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling location tracking: $($_.Exception.Message)`n"
                     }
                 }
@@ -1248,7 +1304,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots" -Name "Value" -Value 0 -Type DWord
                         $progressText.Text += "  Wi-Fi Sense disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling Wi-Fi Sense: $($_.Exception.Message)`n"
                     }
                 }
@@ -1268,7 +1325,8 @@ function global:Apply-SelectedTweaks {
                         Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name "01" -Value 0 -Type DWord
                         $progressText.Text += "  Storage Sense disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling Storage Sense: $($_.Exception.Message)`n"
                     }
                 }
@@ -1285,13 +1343,15 @@ function global:Apply-SelectedTweaks {
                                     Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
                                     Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
                                 }
-                            } catch {
+                            }
+                            catch {
                                 # Service might not exist, continue
                             }
                         }
                         $progressText.Text += "  Homegroup services disabled successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error disabling Homegroup: $($_.Exception.Message)`n"
                     }
                 }
@@ -1308,13 +1368,15 @@ function global:Apply-SelectedTweaks {
                                     Set-Service -Name $serviceName -StartupType Manual -ErrorAction SilentlyContinue
                                     $setCount++
                                 }
-                            } catch {
+                            }
+                            catch {
                                 # Service might not exist, continue
                             }
                         }
                         $progressText.Text += "  Set $setCount services to manual startup successfully!`n"
                         $success = $true
-                    } catch {
+                    }
+                    catch {
                         $progressText.Text += "  Error setting services to manual: $($_.Exception.Message)`n"
                     }
                 }
@@ -1329,17 +1391,19 @@ function global:Apply-SelectedTweaks {
             if ($success) {
                 $progressText.Text += "  [OK] $($selectedTweak.Title) applied successfully`n"
                 $applied++
-            } else {
+            }
+            else {
                 $progressText.Text += "  [ERROR] Failed to apply $($selectedTweak.Title)`n"
                 $failed++
             }
             
-        } catch {
+        }
+        catch {
             $progressText.Text += "  [ERROR] Exception applying $($selectedTweak.Title): $($_.Exception.Message)`n"
             $failed++
         }
         
-        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+        $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
     }
     
     # Add summary
@@ -1357,17 +1421,17 @@ function global:Apply-SelectedTweaks {
     $doneBtn = New-StyledButton -Content 'Done' -FontSize 16 -Margin '0,16,0,0'
     $doneBtn.HorizontalAlignment = 'Center'
     $doneBtn.Add_Click({
-        # Go back to tweaks selection
-        $rightPanelBorder = $global:window.FindName('RightPanelDesc')
-        if ($rightPanelBorder) {
-            global:Show-PerformanceTweaks $rightPanelBorder
-        }
-    }.GetNewClosure())
+            # Go back to tweaks selection
+            $rightPanelBorder = $global:window.FindName('RightPanelDesc')
+            if ($rightPanelBorder) {
+                global:Show-PerformanceTweaks $rightPanelBorder
+            }
+        }.GetNewClosure())
     
     $rightPanelStack.Children.Add($doneBtn)
     
     # Force final UI update
-    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action]{})
+    $global:window.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [action] {})
 }
 
 function Add-MenuItem {
@@ -1381,41 +1445,51 @@ function Add-MenuItem {
     $item.TextWrapping = 'Wrap'
     $item.Cursor = [System.Windows.Input.Cursors]::Hand
     $item.Add_MouseLeftButtonUp({
-        try {
-            if ($scriptName -eq 'Online-app-Install.ps1') {
-                # Special handling for Online-app-Install.ps1 - directly show app selection
-                global:Show-AppSelection
-            } elseif ($scriptName -eq 'Perfomance_Tweaks.ps1') {
-                $rightPanelBorder = $global:window.FindName('RightPanelDesc')
-                if ($rightPanelBorder) {
-                    global:Show-PerformanceTweaks $rightPanelBorder
+            try {
+                if ($scriptName -eq 'Online-app-Install.ps1') {
+                    # Special handling for Online-app-Install.ps1 - directly show app selection
+                    global:Show-AppSelection
                 }
-            } elseif ($scriptName -eq 'App_Remover.ps1') {
-                $rightPanelBorder = $global:window.FindName('RightPanelDesc')
-                if ($rightPanelBorder) {
-                    global:Show-AppRemovalSelection $rightPanelBorder
+                elseif ($scriptName -eq 'Perfomance_Tweaks.ps1') {
+                    $rightPanelBorder = $global:window.FindName('RightPanelDesc')
+                    if ($rightPanelBorder) {
+                        global:Show-PerformanceTweaks $rightPanelBorder
+                    }
                 }
-            } elseif ($scriptName) {
-                # Show description and run button for the selected script
-                global:Show-ScriptDescription $text $scriptName
-            } elseif ($text -like 'A. Run All*') {
-                global:Show-RunAllOption
-            } elseif ($text -eq '1. General Tweaks') {
-                global:Show-GeneralTweaksMenu
-            } elseif ($text -eq '2. Network') {
-                global:Show-NetworkMenu
-            } elseif ($text -eq '3. Device Info') {
-                global:Show-HardwareMenu
-            } elseif ($text -eq '4. Mass Grave') {
-                global:Show-MassGraveMenu
-            } elseif ($text -eq '2. Install Apps (Online)') {
-                # Directly show app selection instead of script description
-                global:Show-AppSelection
+                elseif ($scriptName -eq 'App_Remover.ps1') {
+                    $rightPanelBorder = $global:window.FindName('RightPanelDesc')
+                    if ($rightPanelBorder) {
+                        global:Show-AppRemovalSelection $rightPanelBorder
+                    }
+                }
+                elseif ($scriptName) {
+                    # Show description and run button for the selected script
+                    global:Show-ScriptDescription $text $scriptName
+                }
+                elseif ($text -like 'A. Run All*') {
+                    global:Show-RunAllOption
+                }
+                elseif ($text -eq '1. General Tweaks') {
+                    global:Show-GeneralTweaksMenu
+                }
+                elseif ($text -eq '2. Network') {
+                    global:Show-NetworkMenu
+                }
+                elseif ($text -eq '3. Device Info') {
+                    global:Show-HardwareMenu
+                }
+                elseif ($text -eq '4. Mass Grave') {
+                    global:Show-MassGraveMenu
+                }
+                elseif ($text -eq '2. Install Apps (Online)') {
+                    # Directly show app selection instead of script description
+                    global:Show-AppSelection
+                }
             }
-        } catch {
-            [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)", "Script Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-        }
-    }.GetNewClosure())
+            catch {
+                [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)", "Script Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            }
+        }.GetNewClosure())
     $leftPanelStack.Children.Add($item) | Out-Null
 }
 
@@ -1428,83 +1502,85 @@ function global:Show-ScriptDescription {
             $rightPanelStack = $scrollViewer.Content
             $rightPanelStack.Children.Clear()
         
-        # Get description based on script
-        $description = switch ($scriptName) {
-            'Winget_Install.ps1' { "This script installs the Windows Package Manager (winget) on your system.`n If Winget is already installed then it will be updated to the latest version.`n We recommend using this script to ensure you have the latest version of winget,`n as it will provide the best experience when running other tweaks." }
-            'Online-app-Install.ps1' { "Select applications to install from a curated list of popular software.`n This script will automate the installation process for you." }
-            'Delay-WindowsUpdates.ps1' { "Delay Windows Updates`n`nThis script will configure Windows Update settings to delay automatic updates, giving you more control over when updates are installed.`n`nFeatures:`n- Prevent automatic restarts`n- Allow manual update installation`n- Maintain security while reducing interruptions" }
-            'Disable-WindowsUpdates.ps1' {"Permenently Disable Windows Updates`n`nThis script will disable Windows Update services and related tasks to prevent automatic updates from being installed on your system.`n`nWarning: Disabling updates can expose your system to security vulnerabilities. Use this script only if you understand the risks and have alternative security measures in place.`n This will also remove the 'Check for Updates' button from windows setting." }
-            'App_Remover.ps1' { "This will Provide you with a list of installed applications and allow you to select which ones to remove." }
-            'Lanman_Network.ps1' { "Lanman Network Tweaks`n`nThis script configures LanmanWorkstation registry settings and SMB client configuration to enable secure guest authentication and insecure guest logons.`n`nWhat it does:`n- Enables AllowInsecureGuestAuth registry setting`n- Disables SMB security signature requirements`n- Enables insecure guest logons for SMB shares`n- Improves compatibility with older network devices`n`nNote: These changes reduce security but may be needed for legacy network access." }
-            'SMB-Connection-Reset.ps1' { "Reset SMB Connections`n`nThis comprehensive network management script displays network adapter information, shows active SMB connections, and provides the option to reset all SMB connections by restarting the LanmanWorkstation service.`n`nFeatures:`n- Display network adapter link speeds and status`n- Show all active SMB protocol connections`n- Reset SMB connections (requires confirmation)`n- Restart LanmanWorkstation service safely`n- Requires administrator privileges for service operations" }
-            'link-speed.ps1' { "Ethernet Link Speed Information`n`nThis simple diagnostic script displays detailed information about all network adapters on your system, including their current link speeds, status, and interface descriptions.`n`nInformation displayed:`n- Network adapter names and descriptions`n- Current connection status (Connected/Disconnected)`n- Link speed (e.g., 1 Gbps, 100 Mbps)`n- Interface details for troubleshooting`n`nUseful for diagnosing network performance issues and verifying adapter speeds." }
-            'Hardware_Report_Generator.ps1' { "Hardware Information Report Generator`n`nThis comprehensive diagnostic script generates a detailed hardware report for your system and saves it to your desktop.`n`nReport includes:`n- System specifications (CPU, RAM, Storage)`n- Hardware component details`n- System boot type (UEFI/Legacy BIOS)`n- XMP memory profile status`n- Graphics adapter information`n- System temperatures and performance data`n`nThe report is automatically saved to your desktop with a timestamped filename for easy reference." }
-            default { "Script: $scriptName`n`nThis script will perform system optimization tasks. Click 'Run Script' to execute it with administrator privileges." }
-        }
+            # Get description based on script
+            $description = switch ($scriptName) {
+                'Winget_Install.ps1' { "This script installs the Windows Package Manager (winget) on your system.`n If Winget is already installed then it will be updated to the latest version.`n We recommend using this script to ensure you have the latest version of winget,`n as it will provide the best experience when running other tweaks." }
+                'Online-app-Install.ps1' { "Select applications to install from a curated list of popular software.`n This script will automate the installation process for you." }
+                'Delay-WindowsUpdates.ps1' { "Delay Windows Updates`n`nThis script will configure Windows Update settings to delay automatic updates, giving you more control over when updates are installed.`n`nFeatures:`n- Prevent automatic restarts`n- Allow manual update installation`n- Maintain security while reducing interruptions" }
+                'Disable-WindowsUpdates.ps1' { "Permenently Disable Windows Updates`n`nThis script will disable Windows Update services and related tasks to prevent automatic updates from being installed on your system.`n`nWarning: Disabling updates can expose your system to security vulnerabilities. Use this script only if you understand the risks and have alternative security measures in place.`n This will also remove the 'Check for Updates' button from windows setting." }
+                'App_Remover.ps1' { "This will Provide you with a list of installed applications and allow you to select which ones to remove." }
+                'Lanman_Network.ps1' { "Lanman Network Tweaks`n`nThis script configures LanmanWorkstation registry settings and SMB client configuration to enable secure guest authentication and insecure guest logons.`n`nWhat it does:`n- Enables AllowInsecureGuestAuth registry setting`n- Disables SMB security signature requirements`n- Enables insecure guest logons for SMB shares`n- Improves compatibility with older network devices`n`nNote: These changes reduce security but may be needed for legacy network access." }
+                'SMB-Connection-Reset.ps1' { "Reset SMB Connections`n`nThis comprehensive network management script displays network adapter information, shows active SMB connections, and provides the option to reset all SMB connections by restarting the LanmanWorkstation service.`n`nFeatures:`n- Display network adapter link speeds and status`n- Show all active SMB protocol connections`n- Reset SMB connections (requires confirmation)`n- Restart LanmanWorkstation service safely`n- Requires administrator privileges for service operations" }
+                'link-speed.ps1' { "Ethernet Link Speed Information`n`nThis simple diagnostic script displays detailed information about all network adapters on your system, including their current link speeds, status, and interface descriptions.`n`nInformation displayed:`n- Network adapter names and descriptions`n- Current connection status (Connected/Disconnected)`n- Link speed (e.g., 1 Gbps, 100 Mbps)`n- Interface details for troubleshooting`n`nUseful for diagnosing network performance issues and verifying adapter speeds." }
+                'Hardware_Report_Generator.ps1' { "Hardware Information Report Generator`n`nThis comprehensive diagnostic script generates a detailed hardware report for your system and saves it to your desktop.`n`nReport includes:`n- System specifications (CPU, RAM, Storage)`n- Hardware component details`n- System boot type (UEFI/Legacy BIOS)`n- XMP memory profile status`n- Graphics adapter information`n- System temperatures and performance data`n`nThe report is automatically saved to your desktop with a timestamped filename for easy reference." }
+                default { "Script: $scriptName`n`nThis script will perform system optimization tasks. Click 'Run Script' to execute it with administrator privileges." }
+            }
         
-        # Add description text
-        $descBlock = New-Object System.Windows.Controls.TextBlock
-        $descBlock.Text = $description
-        $descBlock.FontSize = 16
-        $descBlock.Foreground = 'White'
-        $descBlock.FontFamily = 'Segoe UI'
-        $descBlock.Margin = '0,0,0,20'
-        $descBlock.TextWrapping = 'Wrap'
-        $rightPanelStack.Children.Add($descBlock)
+            # Add description text
+            $descBlock = New-Object System.Windows.Controls.TextBlock
+            $descBlock.Text = $description
+            $descBlock.FontSize = 16
+            $descBlock.Foreground = 'White'
+            $descBlock.FontFamily = 'Segoe UI'
+            $descBlock.Margin = '0,0,0,20'
+            $descBlock.TextWrapping = 'Wrap'
+            $rightPanelStack.Children.Add($descBlock)
         
-        # Add Run Script button
-        $runBtn = New-StyledButton -Content 'Run Script' -FontSize 18 -Width 150
-        $runBtn.Height = 40
-        $runBtn.HorizontalAlignment = 'Left'
+            # Add Run Script button
+            $runBtn = New-StyledButton -Content 'Run Script' -FontSize 18 -Width 150
+            $runBtn.Height = 40
+            $runBtn.HorizontalAlignment = 'Left'
         
-        # Store the script info as button properties
-        $runBtn.Tag = @{
-            ScriptName = $scriptName
-            MenuText = $menuText
-        }
+            # Store the script info as button properties
+            $runBtn.Tag = @{
+                ScriptName = $scriptName
+                MenuText   = $menuText
+            }
         
-        $runBtn.Add_Click({
-            $buttonData = $this.Tag
-            $scriptName = $buttonData.ScriptName
+            $runBtn.Add_Click({
+                    $buttonData = $this.Tag
+                    $scriptName = $buttonData.ScriptName
             
-            # Special handling for link-speed.ps1 to show results in UI
-            if ($scriptName -eq 'link-speed.ps1') {
-                global:Show-LinkSpeedResults
-                return
-            }
+                    # Special handling for link-speed.ps1 to show results in UI
+                    if ($scriptName -eq 'link-speed.ps1') {
+                        global:Show-LinkSpeedResults
+                        return
+                    }
             
-            # Special handling for Hardware_Report_Generator.ps1 to show results in UI
-            if ($scriptName -eq 'Hardware_Report_Generator.ps1') {
-                global:Show-HardwareResults
-                return
-            }
+                    # Special handling for Hardware_Report_Generator.ps1 to show results in UI
+                    if ($scriptName -eq 'Hardware_Report_Generator.ps1') {
+                        global:Show-HardwareResults
+                        return
+                    }
             
-            # Special handling for Online-app-Install.ps1 to show app selection UI
-            if ($scriptName -eq 'Online-app-Install.ps1') {
-                global:Show-AppSelection
-                return
-            }
+                    # Special handling for Online-app-Install.ps1 to show app selection UI
+                    if ($scriptName -eq 'Online-app-Install.ps1') {
+                        global:Show-AppSelection
+                        return
+                    }
             
-            # Special handling for Lanman_Network.ps1 to show results in UI
-            if ($scriptName -eq 'Lanman_Network.ps1') {
-                # Run the UI function (already running as admin)
-                global:Show-LanmanResults
-                return
-            }
+                    # Special handling for Lanman_Network.ps1 to show results in UI
+                    if ($scriptName -eq 'Lanman_Network.ps1') {
+                        # Run the UI function (already running as admin)
+                        global:Show-LanmanResults
+                        return
+                    }
             
-            $scriptUrl = Get-GitHubScriptUrl $scriptName
-            if ($scriptUrl) {
-                try {
-                    # Execute script from GitHub and show results
-                    global:Show-ScriptResults $scriptName $buttonData.MenuText
-                } catch {
-                    [System.Windows.MessageBox]::Show("Error executing script: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                }
-            } else {
-                [System.Windows.MessageBox]::Show("Script not available from GitHub: $scriptName", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-            }
-        })
-        $rightPanelStack.Children.Add($runBtn)
+                    $scriptUrl = Get-GitHubScriptUrl $scriptName
+                    if ($scriptUrl) {
+                        try {
+                            # Execute script from GitHub and show results
+                            global:Show-ScriptResults $scriptName $buttonData.MenuText
+                        }
+                        catch {
+                            [System.Windows.MessageBox]::Show("Error executing script: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                        }
+                    }
+                    else {
+                        [System.Windows.MessageBox]::Show("Script not available from GitHub: $scriptName", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                    }
+                })
+            $rightPanelStack.Children.Add($runBtn)
         }
     }
 }
@@ -1517,34 +1593,35 @@ function global:Show-RunAllOption {
             $rightPanelStack = $scrollViewer.Content
             $rightPanelStack.Children.Clear()
         
-        # Add description for Run All
-        $descBlock = New-Object System.Windows.Controls.TextBlock
-        $descBlock.Text = "Run All General Tweaks Scripts`n`nThis option will execute all General Tweaks scripts in sequence:`n`n1. Install Winget (Package Manager)`n2. Install Common Applications`n3. Apply Performance Tweaks (automatically)`n4. Delay Windows Updates`n5. Remove Bloatware Applications`n`nThis process may take several minutes and will require administrator privileges. Each script will run one after another automatically."
-        $descBlock.FontSize = 16
-        $descBlock.Foreground = 'White'
-        $descBlock.FontFamily = 'Segoe UI'
-        $descBlock.Margin = '0,0,0,20'
-        $descBlock.TextWrapping = 'Wrap'
-        $rightPanelStack.Children.Add($descBlock)
+            # Add description for Run All
+            $descBlock = New-Object System.Windows.Controls.TextBlock
+            $descBlock.Text = "Run All General Tweaks Scripts`n`nThis option will execute all General Tweaks scripts in sequence:`n`n1. Install Winget (Package Manager)`n2. Install Common Applications`n3. Apply Performance Tweaks (automatically)`n4. Delay Windows Updates`n5. Remove Bloatware Applications`n`nThis process may take several minutes and will require administrator privileges. Each script will run one after another automatically."
+            $descBlock.FontSize = 16
+            $descBlock.Foreground = 'White'
+            $descBlock.FontFamily = 'Segoe UI'
+            $descBlock.Margin = '0,0,0,20'
+            $descBlock.TextWrapping = 'Wrap'
+            $rightPanelStack.Children.Add($descBlock)
         
-        # Add Run All button
-        $runAllBtn = New-StyledButton -Content 'Run All Scripts' -FontSize 18 -Width 180
-        $runAllBtn.Height = 40
-        $runAllBtn.HorizontalAlignment = 'Left'
-        $runAllBtn.Add_Click({
-            # Run scripts in sequence (already running as admin)
-            $scripts = @('Winget_Install.ps1', 'Online-app-Install.ps1', 'Delay-WindowsUpdates.ps1', 'App_Remover.ps1')
-            $failedScripts = @()
+            # Add Run All button
+            $runAllBtn = New-StyledButton -Content 'Run All Scripts' -FontSize 18 -Width 180
+            $runAllBtn.Height = 40
+            $runAllBtn.HorizontalAlignment = 'Left'
+            $runAllBtn.Add_Click({
+                    # Run scripts in sequence (already running as admin)
+                    $scripts = @('Winget_Install.ps1', 'Online-app-Install.ps1', 'Delay-WindowsUpdates.ps1', 'App_Remover.ps1')
+                    $failedScripts = @()
             
-            foreach ($script in $scripts) {
-                try {
-                    Invoke-GitHubScript $script
-                } catch {
-                    $failedScripts += $script
-                }
-            }
-        })
-        $rightPanelStack.Children.Add($runAllBtn)
+                    foreach ($script in $scripts) {
+                        try {
+                            Invoke-GitHubScript $script
+                        }
+                        catch {
+                            $failedScripts += $script
+                        }
+                    }
+                })
+            $rightPanelStack.Children.Add($runAllBtn)
         }
     }
 }
@@ -1614,8 +1691,8 @@ function global:Show-SubMenu {
         $backBtn.Margin = '0,0,0,20'
         $backBtn.Cursor = [System.Windows.Input.Cursors]::Hand
         $backBtn.Add_MouseLeftButtonUp({
-            global:Show-MainMenu
-        })
+                global:Show-MainMenu
+            })
         $leftPanelStack.Children.Add($backBtn)
         
         # Add section title
@@ -1647,7 +1724,7 @@ function global:Show-SubMenuRightPanel {
         if ($scrollViewer -and $scrollViewer.Content) {
             $rightPanelStack = $scrollViewer.Content
             $rightPanelStack.Children.Clear()
-            $rightPanelStack.Children.Add((New-Object System.Windows.Controls.TextBlock -Property @{Text=$Description; FontSize=18; Foreground='White'; FontFamily='Segoe UI'; Margin='0,0,0,12'}))
+            $rightPanelStack.Children.Add((New-Object System.Windows.Controls.TextBlock -Property @{Text = $Description; FontSize = 18; Foreground = 'White'; FontFamily = 'Segoe UI'; Margin = '0,0,0,12' }))
         }
     }
 }
@@ -1704,30 +1781,32 @@ function global:Show-MassGraveMenu {
             $runBtn.Height = 45
             $runBtn.HorizontalAlignment = 'Center'
             $runBtn.Add_Click({
-                try {
-                    # Show confirmation dialog
-                    $result = [System.Windows.MessageBox]::Show(
-                        "This will run the Microsoft Activation Scripts (MAS) from the official repository.`n`nAre you sure you want to continue?", 
-                        "Run Microsoft Activation Scripts", 
-                        [System.Windows.MessageBoxButton]::YesNo, 
-                        [System.Windows.MessageBoxImage]::Question
-                    )
+                    try {
+                        # Show confirmation dialog
+                        $result = [System.Windows.MessageBox]::Show(
+                            "This will run the Microsoft Activation Scripts (MAS) from the official repository.`n`nAre you sure you want to continue?", 
+                            "Run Microsoft Activation Scripts", 
+                            [System.Windows.MessageBoxButton]::YesNo, 
+                            [System.Windows.MessageBoxImage]::Question
+                        )
                     
-                    if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
-                        # Show progress
-                        global:Show-MassGraveProgress
+                        if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
+                            # Show progress
+                            global:Show-MassGraveProgress
                         
-                        # Execute the original MassGrave command
-                        try {
-                            Invoke-RestMethod https://get.activated.win | Invoke-Expression
-                        } catch {
-                            [System.Windows.MessageBox]::Show("Error running MAS: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                            # Execute the original MassGrave command
+                            try {
+                                Invoke-RestMethod https://get.activated.win | Invoke-Expression
+                            }
+                            catch {
+                                [System.Windows.MessageBox]::Show("Error running MAS: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                            }
                         }
                     }
-                } catch {
-                    [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                }
-            })
+                    catch {
+                        [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                    }
+                })
             $rightPanelStack.Children.Add($runBtn)
             
             # Add more info button
@@ -1735,12 +1814,13 @@ function global:Show-MassGraveMenu {
             $infoBtn.Height = 35
             $infoBtn.HorizontalAlignment = 'Center'
             $infoBtn.Add_Click({
-                try {
-                    Start-Process "https://massgrave.dev/"
-                } catch {
-                    [System.Windows.MessageBox]::Show("Could not open browser. Visit: https://massgrave.dev/", "Information", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-                }
-            })
+                    try {
+                        Start-Process "https://massgrave.dev/"
+                    }
+                    catch {
+                        [System.Windows.MessageBox]::Show("Could not open browser. Visit: https://massgrave.dev/", "Information", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+                    }
+                })
             $rightPanelStack.Children.Add($infoBtn)
         }
     }
@@ -1841,7 +1921,8 @@ function global:Show-LanmanResults {
                 $results += "Configuration completed successfully!"
                 $results += "Note: These changes improve compatibility with older network devices but reduce security."
                 
-            } catch {
+            }
+            catch {
                 $results += "[ERROR] Error: $($_.Exception.Message)"
             }
             
@@ -1856,22 +1937,27 @@ function global:Show-LanmanResults {
                 
                 if ($result -like "[OK]*") {
                     $resultBlock.Foreground = '#FF4CAF50'  # Green for success
-                } elseif ($result -like "[ERROR]*") {
+                }
+                elseif ($result -like "[ERROR]*") {
                     $resultBlock.Foreground = '#FFFF5722'  # Red for errors
-                } elseif ($result -like "Note:*") {
+                }
+                elseif ($result -like "Note:*") {
                     $resultBlock.Foreground = '#FFFFEB3B'  # Yellow for warnings
-                } elseif ($result -eq "" -or $result -like "*Configuration*" -or $result -like "*Results*") {
+                }
+                elseif ($result -eq "" -or $result -like "*Configuration*" -or $result -like "*Results*") {
                     if ($result -ne "") {
                         $resultBlock.Foreground = '#FF03DAC6'  # Cyan for section headers
                         $resultBlock.FontWeight = 'Bold'
                     }
-                } else {
+                }
+                else {
                     $resultBlock.Foreground = 'White'
                 }
                 
                 if ($result -ne "") {
                     $rightPanelStack.Children.Add($resultBlock)
-                } else {
+                }
+                else {
                     # Add spacing for empty lines
                     $spacer = New-Object System.Windows.Controls.TextBlock
                     $spacer.Height = 8
@@ -1945,7 +2031,8 @@ function global:Show-LinkSpeedResults {
                     $statusBlock.Margin = '0,0,0,4'
                     if ($adapter.Status -eq 'Up') {
                         $statusBlock.Foreground = '#FF4CAF50'  # Green
-                    } else {
+                    }
+                    else {
                         $statusBlock.Foreground = '#FFFF5722'  # Red
                     }
                     $adapterStack.Children.Add($statusBlock)
@@ -1963,7 +2050,8 @@ function global:Show-LinkSpeedResults {
                     $border.Child = $adapterStack
                     $rightPanelStack.Children.Add($border)
                 }
-            } catch {
+            }
+            catch {
                 $errorBlock = New-Object System.Windows.Controls.TextBlock
                 $errorBlock.Text = "Error retrieving network adapter information: $($_.Exception.Message)"
                 $errorBlock.FontSize = 14
@@ -2065,20 +2153,22 @@ function global:Show-HardwareResults {
                 # Open file button
                 $openBtn = New-StyledButton -Content 'Open Report' -FontSize 14 -Width 150 -Margin '0,8,0,0'
                 $openBtn.Add_Click({
-                    if ($filePath -and (Test-Path $filePath)) {
-                        Start-Process notepad $filePath
-                    } else {
-                        # Fallback to opening desktop folder if file not found
-                        $desktopPath = [Environment]::GetFolderPath('Desktop')
-                        Start-Process explorer $desktopPath
-                    }
-                }.GetNewClosure())
+                        if ($filePath -and (Test-Path $filePath)) {
+                            Start-Process notepad $filePath
+                        }
+                        else {
+                            # Fallback to opening desktop folder if file not found
+                            $desktopPath = [Environment]::GetFolderPath('Desktop')
+                            Start-Process explorer $desktopPath
+                        }
+                    }.GetNewClosure())
                 $resultStack.Children.Add($openBtn)
                 
                 $resultBorder.Child = $resultStack
                 $rightPanelStack.Children.Add($resultBorder)
                 
-            } catch {
+            }
+            catch {
                 # Error handling
                 $statusBlock.Text = 'Error generating hardware report'
                 $statusBlock.Foreground = '#FF6B6B'  # Light red
@@ -2180,15 +2270,20 @@ function global:Show-ScriptResults {
                         # Color code based on content
                         if ($line -match "ERROR|FAILED|Exception|Error:") {
                             $outputLine.Foreground = '#FF6B6B'  # Red for errors
-                        } elseif ($line -match "SUCCESS|COMPLETED|OK|\[OK\]|Success!|Successfully|Complete") {
+                        }
+                        elseif ($line -match "SUCCESS|COMPLETED|OK|\[OK\]|Success!|Successfully|Complete") {
                             $outputLine.Foreground = '#4CAF50'  # Green for success
-                        } elseif ($line -match "WARNING|WARN|\[WARNING\]") {
+                        }
+                        elseif ($line -match "WARNING|WARN|\[WARNING\]") {
                             $outputLine.Foreground = '#FFC107'  # Yellow for warnings
-                        } elseif ($line -match "Installing|Downloading|Processing|Current:|Method:|Build:|Version:") {
+                        }
+                        elseif ($line -match "Installing|Downloading|Processing|Current:|Method:|Build:|Version:") {
                             $outputLine.Foreground = '#03DAC6'  # Cyan for progress/info
-                        } elseif ($line -match "Windows|PowerShell|WinGet|Latest") {
+                        }
+                        elseif ($line -match "Windows|PowerShell|WinGet|Latest") {
                             $outputLine.Foreground = '#87CEEB'  # Light blue for system info
-                        } else {
+                        }
+                        else {
                             $outputLine.Foreground = 'White'    # White for normal text
                         }
                         
@@ -2219,7 +2314,8 @@ function global:Show-ScriptResults {
                 $statusBlock.Text = 'Script execution completed!'
                 $statusBlock.Foreground = '#4CAF50'
                 
-            } catch {
+            }
+            catch {
                 # Error handling
                 $statusBlock.Text = 'Script execution failed!'
                 $statusBlock.Foreground = '#FF6B6B'
@@ -2330,42 +2426,42 @@ function global:Show-AppSelection {
             $installBtn.Height = 40
             
             $installBtn.Add_Click({
-                # Get selected apps
-                $selectedApps = @()
-                foreach ($cb in $checkboxes) {
-                    if ($cb.IsChecked) {
-                        $selectedApps += $cb.Tag
+                    # Get selected apps
+                    $selectedApps = @()
+                    foreach ($cb in $checkboxes) {
+                        if ($cb.IsChecked) {
+                            $selectedApps += $cb.Tag
+                        }
                     }
-                }
                 
-                if ($selectedApps.Count -eq 0) {
-                    [System.Windows.MessageBox]::Show("Please select at least one app to install.", "No Apps Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-                    return
-                }
+                    if ($selectedApps.Count -eq 0) {
+                        [System.Windows.MessageBox]::Show("Please select at least one app to install.", "No Apps Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+                        return
+                    }
                 
-                # Start installation process
-                global:Start-AppInstallation $selectedApps
-            }.GetNewClosure())
+                    # Start installation process
+                    global:Start-AppInstallation $selectedApps
+                }.GetNewClosure())
             
             # Select All button
             $selectAllBtn = New-StyledButton -Content 'Select All' -FontSize 16 -Background '#444444' -Width 120 -Margin '0,0,16,0'
             $selectAllBtn.Height = 40
             
             $selectAllBtn.Add_Click({
-                foreach ($cb in $checkboxes) {
-                    $cb.IsChecked = $true
-                }
-            }.GetNewClosure())
+                    foreach ($cb in $checkboxes) {
+                        $cb.IsChecked = $true
+                    }
+                }.GetNewClosure())
             
             # Clear All button
             $clearAllBtn = New-StyledButton -Content 'Clear All' -FontSize 16 -Background '#444444' -Width 120
             $clearAllBtn.Height = 40
             
             $clearAllBtn.Add_Click({
-                foreach ($cb in $checkboxes) {
-                    $cb.IsChecked = $false
-                }
-            }.GetNewClosure())
+                    foreach ($cb in $checkboxes) {
+                        $cb.IsChecked = $false
+                    }
+                }.GetNewClosure())
             
             $buttonPanel.Children.Add($installBtn)
             $buttonPanel.Children.Add($selectAllBtn)
@@ -2534,128 +2630,138 @@ function global:Start-AppInstallation {
                 $timer = New-Object System.Windows.Threading.DispatcherTimer
                 $timer.Interval = [TimeSpan]::FromSeconds(1)
                 $timer.Add_Tick({
-                    try {
-                        if ($global:CurrentInstallJobId) {
-                            $job = Get-Job -Id $global:CurrentInstallJobId -ErrorAction SilentlyContinue
-                            if ($job) {
-                                if ($job.State -eq 'Completed') {
-                                    # Job finished - get results
-                                    $results = Receive-Job -Job $job
-                                    Remove-Job -Job $job
+                        try {
+                            if ($global:CurrentInstallJobId) {
+                                $job = Get-Job -Id $global:CurrentInstallJobId -ErrorAction SilentlyContinue
+                                if ($job) {
+                                    if ($job.State -eq 'Completed') {
+                                        # Job finished - get results
+                                        $results = Receive-Job -Job $job
+                                        Remove-Job -Job $job
                                     
-                                    # Update status
-                                    if ($global:InstallStatusBlock) {
-                                        $global:InstallStatusBlock.Text = 'Installation completed!'
-                                        $global:InstallStatusBlock.Foreground = '#4CAF50'
-                                    }
+                                        # Update status
+                                        if ($global:InstallStatusBlock) {
+                                            $global:InstallStatusBlock.Text = 'Installation completed!'
+                                            $global:InstallStatusBlock.Foreground = '#4CAF50'
+                                        }
                                     
-                                    # Clear progress and show results
-                                    if ($global:InstallProgressStack) {
-                                        $global:InstallProgressStack.Children.Clear()
+                                        # Clear progress and show results
+                                        if ($global:InstallProgressStack) {
+                                            $global:InstallProgressStack.Children.Clear()
                                         
-                                        foreach ($line in $results) {
-                                            if ($line -and $line.ToString().Trim() -ne "") {
-                                                $outputLine = New-Object System.Windows.Controls.TextBlock
-                                                $outputLine.Text = $line.ToString()
-                                                $outputLine.FontSize = 12
-                                                $outputLine.FontFamily = 'Consolas'
-                                                $outputLine.TextWrapping = 'Wrap'
-                                                $outputLine.Margin = '0,0,0,2'
+                                            foreach ($line in $results) {
+                                                if ($line -and $line.ToString().Trim() -ne "") {
+                                                    $outputLine = New-Object System.Windows.Controls.TextBlock
+                                                    $outputLine.Text = $line.ToString()
+                                                    $outputLine.FontSize = 12
+                                                    $outputLine.FontFamily = 'Consolas'
+                                                    $outputLine.TextWrapping = 'Wrap'
+                                                    $outputLine.Margin = '0,0,0,2'
                                                 
-                                                # Color code based on content
-                                                if ($line -match "ERROR|FAILED|Exception") {
-                                                    $outputLine.Foreground = '#FF6B6B'
-                                                } elseif ($line -match "SUCCESS|Successfully|Complete") {
-                                                    $outputLine.Foreground = '#4CAF50'
-                                                } elseif ($line -match "Installing|Processing") {
-                                                    $outputLine.Foreground = '#03DAC6'
-                                                } elseif ($line -match "Already installed") {
-                                                    $outputLine.Foreground = '#FFC107'
-                                                } else {
-                                                    $outputLine.Foreground = 'White'
+                                                    # Color code based on content
+                                                    if ($line -match "ERROR|FAILED|Exception") {
+                                                        $outputLine.Foreground = '#FF6B6B'
+                                                    }
+                                                    elseif ($line -match "SUCCESS|Successfully|Complete") {
+                                                        $outputLine.Foreground = '#4CAF50'
+                                                    }
+                                                    elseif ($line -match "Installing|Processing") {
+                                                        $outputLine.Foreground = '#03DAC6'
+                                                    }
+                                                    elseif ($line -match "Already installed") {
+                                                        $outputLine.Foreground = '#FFC107'
+                                                    }
+                                                    else {
+                                                        $outputLine.Foreground = 'White'
+                                                    }
+                                                
+                                                    $global:InstallProgressStack.Children.Add($outputLine)
                                                 }
-                                                
-                                                $global:InstallProgressStack.Children.Add($outputLine)
                                             }
                                         }
+                                    
+                                        # Stop timer and cleanup
+                                        $this.Stop()
+                                        Remove-Item $tempWrapperFile -Force -ErrorAction SilentlyContinue
+                                        $global:CurrentInstallJobId = $null
+                                    
                                     }
+                                    elseif ($job.State -eq 'Failed') {
+                                        # Job failed
+                                        $jobError = Receive-Job -Job $job -ErrorAction SilentlyContinue
+                                        Remove-Job -Job $job
                                     
-                                    # Stop timer and cleanup
-                                    $this.Stop()
-                                    Remove-Item $tempWrapperFile -Force -ErrorAction SilentlyContinue
-                                    $global:CurrentInstallJobId = $null
+                                        if ($global:InstallStatusBlock) {
+                                            $global:InstallStatusBlock.Text = 'Installation failed!'
+                                            $global:InstallStatusBlock.Foreground = '#FF6B6B'
+                                        }
                                     
-                                } elseif ($job.State -eq 'Failed') {
-                                    # Job failed
-                                    $jobError = Receive-Job -Job $job -ErrorAction SilentlyContinue
-                                    Remove-Job -Job $job
+                                        if ($global:InstallProgressStack) {
+                                            $errorLine = New-Object System.Windows.Controls.TextBlock
+                                            $errorLine.Text = "Error: $jobError"
+                                            $errorLine.FontSize = 12
+                                            $errorLine.Foreground = '#FF6B6B'
+                                            $errorLine.FontFamily = 'Consolas'
+                                            $errorLine.TextWrapping = 'Wrap'
+                                            $global:InstallProgressStack.Children.Add($errorLine)
+                                        }
                                     
-                                    if ($global:InstallStatusBlock) {
-                                        $global:InstallStatusBlock.Text = 'Installation failed!'
-                                        $global:InstallStatusBlock.Foreground = '#FF6B6B'
+                                        # Stop timer and cleanup
+                                        $this.Stop()
+                                        Remove-Item $tempWrapperFile -Force -ErrorAction SilentlyContinue
+                                        $global:CurrentInstallJobId = $null
                                     }
+                                    else {
+                                        # Job still running - update status
+                                        if ($global:InstallStatusBlock) {
+                                            $global:InstallStatusBlock.Text = 'Installation in progress...'
+                                            $global:InstallStatusBlock.Foreground = '#FFEB3B'
+                                        }
                                     
-                                    if ($global:InstallProgressStack) {
-                                        $errorLine = New-Object System.Windows.Controls.TextBlock
-                                        $errorLine.Text = "Error: $jobError"
-                                        $errorLine.FontSize = 12
-                                        $errorLine.Foreground = '#FF6B6B'
-                                        $errorLine.FontFamily = 'Consolas'
-                                        $errorLine.TextWrapping = 'Wrap'
-                                        $global:InstallProgressStack.Children.Add($errorLine)
-                                    }
-                                    
-                                    # Stop timer and cleanup
-                                    $this.Stop()
-                                    Remove-Item $tempWrapperFile -Force -ErrorAction SilentlyContinue
-                                    $global:CurrentInstallJobId = $null
-                                } else {
-                                    # Job still running - update status
-                                    if ($global:InstallStatusBlock) {
-                                        $global:InstallStatusBlock.Text = 'Installation in progress...'
-                                        $global:InstallStatusBlock.Foreground = '#FFEB3B'
-                                    }
-                                    
-                                    # Show a simple progress indicator
-                                    if ($global:InstallProgressStack) {
-                                        $dots = "." * (([DateTime]::Now.Second % 4) + 1)
-                                        $progressLine = New-Object System.Windows.Controls.TextBlock
-                                        $progressLine.Text = "Working$dots"
-                                        $progressLine.FontSize = 14
-                                        $progressLine.Foreground = '#03DAC6'
-                                        $progressLine.FontFamily = 'Segoe UI'
-                                        $progressLine.Margin = '0,4,0,0'
+                                        # Show a simple progress indicator
+                                        if ($global:InstallProgressStack) {
+                                            $dots = "." * (([DateTime]::Now.Second % 4) + 1)
+                                            $progressLine = New-Object System.Windows.Controls.TextBlock
+                                            $progressLine.Text = "Working$dots"
+                                            $progressLine.FontSize = 14
+                                            $progressLine.Foreground = '#03DAC6'
+                                            $progressLine.FontFamily = 'Segoe UI'
+                                            $progressLine.Margin = '0,4,0,0'
                                         
-                                        $global:InstallProgressStack.Children.Clear()
-                                        $global:InstallProgressStack.Children.Add($progressLine)
+                                            $global:InstallProgressStack.Children.Clear()
+                                            $global:InstallProgressStack.Children.Add($progressLine)
+                                        }
                                     }
                                 }
-                            } else {
-                                # Job not found - probably completed and cleaned up
-                                if ($global:InstallStatusBlock) {
-                                    $global:InstallStatusBlock.Text = 'Installation process completed'
-                                    $global:InstallStatusBlock.Foreground = '#4CAF50'
+                                else {
+                                    # Job not found - probably completed and cleaned up
+                                    if ($global:InstallStatusBlock) {
+                                        $global:InstallStatusBlock.Text = 'Installation process completed'
+                                        $global:InstallStatusBlock.Foreground = '#4CAF50'
+                                    }
+                                    $this.Stop()
+                                    $global:CurrentInstallJobId = $null
                                 }
-                                $this.Stop()
-                                $global:CurrentInstallJobId = $null
                             }
-                        } else {
-                            # No job ID - stop timer
-                            $this.Stop()
+                            else {
+                                # No job ID - stop timer
+                                $this.Stop()
+                            }
                         }
-                    } catch {
-                        # Error in timer - stop it to prevent spam
-                        $this.Stop()
-                        $global:CurrentInstallJobId = $null
-                    }
-                })
+                        catch {
+                            # Error in timer - stop it to prevent spam
+                            $this.Stop()
+                            $global:CurrentInstallJobId = $null
+                        }
+                    })
                 
                 # Start the timer
                 $timer.Start()
             }
         }
         
-    } catch {
+    }
+    catch {
         $rightPanelBorder = $global:window.FindName('RightPanelDesc')
         if ($rightPanelBorder -and $rightPanelBorder.Child) {
             $scrollViewer = $rightPanelBorder.Child
@@ -2685,20 +2791,21 @@ if ($closeBtn) {
 $maxBtn = $global:window.FindName('MaxBtn')
 if ($maxBtn) {
     $maxBtn.Add_Click({
-        if ($global:window.WindowState -eq 'Normal') {
-            $global:window.WindowState = 'Maximized'
-        } else {
-            $global:window.WindowState = 'Normal'
-        }
-    })
+            if ($global:window.WindowState -eq 'Normal') {
+                $global:window.WindowState = 'Maximized'
+            }
+            else {
+                $global:window.WindowState = 'Normal'
+            }
+        })
 }
 
 # Add drag functionality to the custom title bar
 $titleBar = $global:window.FindName('TitleBar')
 if ($titleBar) {
     $titleBar.Add_MouseLeftButtonDown({
-        $global:window.DragMove()
-    })
+            $global:window.DragMove()
+        })
 }
 
 # Load and set the logo image from GitHub
@@ -2718,7 +2825,7 @@ if ($logoImage) {
             $webClient.Dispose()
             
             # Create bitmap from byte array
-            $memoryStream = New-Object System.IO.MemoryStream(,$imageBytes)
+            $memoryStream = New-Object System.IO.MemoryStream(, $imageBytes)
             $bitmap = New-Object System.Windows.Media.Imaging.BitmapImage
             $bitmap.BeginInit()
             $bitmap.StreamSource = $memoryStream
@@ -2733,10 +2840,12 @@ if ($logoImage) {
             
             # Clean up
             $memoryStream.Dispose()
-        } else {
+        }
+        else {
             throw "Logo file not found (HTTP $($response.StatusCode))"
         }
-    } catch {
+    }
+    catch {
         # If logo loading fails, hide the logo and continue gracefully
         $logoImage.Visibility = 'Collapsed'
     }
@@ -2752,21 +2861,21 @@ if ($leftPanelBorder -and $leftPanelBorder.Child) {
         $item.Cursor = [System.Windows.Input.Cursors]::Hand
         $itemText = $item.Text  # Capture the text value
         $item.Add_MouseLeftButtonUp({
-            switch ($itemText) {
-                '1. General Tweaks' {
-                    global:Show-GeneralTweaksMenu
+                switch ($itemText) {
+                    '1. General Tweaks' {
+                        global:Show-GeneralTweaksMenu
+                    }
+                    '2. Network' {
+                        global:Show-NetworkMenu
+                    }
+                    '3. Device Info' {
+                        global:Show-HardwareMenu
+                    }
+                    '4. Mass Grave' {
+                        global:Show-MassGraveMenu
+                    }
                 }
-                '2. Network' {
-                    global:Show-NetworkMenu
-                }
-                '3. Device Info' {
-                    global:Show-HardwareMenu
-                }
-                '4. Mass Grave' {
-                    global:Show-MassGraveMenu
-                }
-            }
-        }.GetNewClosure())  # Create a new closure to capture variables
+            }.GetNewClosure())  # Create a new closure to capture variables
     }
 }
 
@@ -2778,7 +2887,8 @@ if ($AutoRun -eq "Lanman") {
     try {
         global:Show-NetworkMenu
         global:Show-LanmanResults
-    } catch {
+    }
+    catch {
         # Silent failure
     }
 }
