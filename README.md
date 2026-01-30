@@ -38,13 +38,18 @@ A PowerShell-based automation suite designed to streamline Windows setup, optimi
 ### Basic Usage
 To run the main script:
 ```powershell
-irm https://sunrisecomputers.github.io/PowerShell/win-auto-setup/main.ps1 | iex
+irm tools.thesunrisecomputers.com/cli.ps1 | iex
 ```
 
 ### Advanced Usage
 For more advanced features, use the interactive UI [RECOMMEND] :
 ```powershell
-irm https://sunrisecomputers.github.io/PowerShell/win-auto-setup/main_UI.ps1 | iex
+irm tools.thesunrisecomputers.com | iex
+```
+[OR]
+
+```powershell
+irm tools.thesunrisecomputers.com/ui.ps1 | iex
 ```
 
 ### Installation
@@ -54,6 +59,10 @@ irm https://sunrisecomputers.github.io/PowerShell/win-auto-setup/main_UI.ps1 | i
     ```bash
     git clone <repository_url>
     cd win-auto-setup
+    ```
+
+    ```bash
+    ./main_UI.ps1
     ```
 
 2.  **Set Execution Policy (if needed):**
