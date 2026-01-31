@@ -59,10 +59,8 @@ irm tools.thesunrisecomputers.com/ui.ps1 | iex
     ```bash
     git clone <repository_url>
     cd win-auto-setup
-    ```
-
-    ```bash
-    ./main_UI.ps1
+    ./main_UI.ps1          # for advanced interactive (UI)
+    ./main.ps1             # for simple command line usage (Less Features)
     ```
 
 2.  **Set Execution Policy (if needed):**
